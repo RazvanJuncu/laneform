@@ -1,7 +1,6 @@
 import { TomTomConfig } from '@tomtom-org/maps-sdk/core';
-import { TomTomMap, TrafficFlowModule } from '@tomtom-org/maps-sdk/map';
 import { calculateRoute, discoverPlaces } from '@tomtom-org/maps-sdk/services';
-import { Marker, LngLatBounds } from 'maplibre-gl';
+import { Map, Marker, LngLatBounds } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 
@@ -9,7 +8,7 @@ import './style.css';
 const DEMO_ORIGIN = [26.061, 44.429];
 const BUCHAREST = [26.1025, 44.4397];
 const el = (id) => document.getElementById(id);
-const state = { map: null, ready: false, traffic: null, routes: null, destination: null, gps: null, marker: null, waypointMarkers: [], originMode: 'demo', busy: false, selected: 0 };
+const state = { map: null, ready: false, routes: null, destination: null, gps: null, marker: null, waypointMarkers: [], originMode: 'demo', busy: false, selected: 0 };
 
 function status(message, error = false) {
   el('message').textContent = message;
@@ -25,33 +24,81 @@ function time(seconds) { return String(Math.max(1, Math.round(seconds / 60))) + 
 function distance(meters) { return meters >= 1000 ? (meters / 1000).toFixed(1) + ' km' : Math.round(meters) + ' m'; }
 function origin() { return state.originMode === 'gps' ? state.gps : DEMO_ORIGIN; }
 
+// TomTom documented raster endpoint, rendered using independent MapLibre rather
+// than the TomTom SDK's public-preview map/style wrapper.
+function baseTileURL(key) {
+  return 'https://api.tomtom.com/maps/orbis/display/raster/tile/{z}/{x}/{y}' +
+    '?apiVersion=2&style=street-dark&tileSize=256&key=' + encodeURIComponent(key);
+}
+function trafficTileURL(key) {
+  return 'https://api.tomtom.com/traffic/map/4/tile/flow/relative0-dark/{z}/{x}/{y}.png' +
+    '?tileSize=256&key=' + encodeURIComponent(key);
+}
+function setTrafficOverlay(enabled) {
+  const map = state.map;
+  if (!map || !state.ready || !map.isStyleLoaded()) return;
+  if (!map.getSource('laneform-traffic')) {
+    if (!enabled) return;
+    map.addSource('laneform-traffic', {
+      type: 'raster', tiles: [trafficTileURL(el('apiKey').value.trim())],
+      tileSize: 256, minzoom: 0, maxzoom: 20
+    });
+    map.addLayer({
+      id: 'laneform-traffic-layer', type: 'raster', source: 'laneform-traffic',
+      paint: { 'raster-opacity': 0.9 }
+    });
+    return;
+  }
+  if (map.getLayer('laneform-traffic-layer')) {
+    map.setLayoutProperty('laneform-traffic-layer', 'visibility', enabled ? 'visible' : 'none');
+  }
+}
 async function connect() {
   const key = el('apiKey').value.trim();
   if (!key) { status('Enter your TomTom API key.', true); return; }
   el('connect').disabled = true;
-  status('Loading map style…');
+  status('Checking TomTom map access…');
   state.ready = false;
   try {
     TomTomConfig.instance.put({ apiKey: key, language: 'en-GB' });
-    if (state.map?.mapLibreMap) state.map.mapLibreMap.remove();
-    state.map = new TomTomMap({
-      apiKey: key,
-      style: { type: 'standard', id: 'drivingDark', include: ['trafficFlow', 'trafficIncidents'] },
-      mapLibre: { container: 'map', center: BUCHAREST, zoom: 12, attributionControl: true }
-    });
-    const map = state.map.mapLibreMap;
-    if (!map.loaded()) {
-      await new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('Map loading timed out. Check map API permissions and domain settings.')), 20000);
-        map.once('load', () => { clearTimeout(timer); resolve(); });
-        map.on('error', (event) => {
-          if (!map.isStyleLoaded()) {
-            clearTimeout(timer);
-            reject(event.error || new Error('Could not load TomTom map style'));
-          }
-        });
-      });
+    // Verify the actual tile endpoint and report an actionable HTTP status.
+    const probe = await fetch(
+      'https://api.tomtom.com/maps/orbis/display/raster/tile/0/0/0' +
+      '?apiVersion=2&style=street-dark&tileSize=256&key=' + encodeURIComponent(key),
+      { cache: 'no-store' }
+    );
+    if (!probe.ok) {
+      throw new Error('TomTom map tile returned HTTP ' + probe.status +
+        '. Check Map Display API permission, domain whitelist and free-tier usage.');
     }
+    if (state.map) state.map.remove();
+    const style = {
+      version: 8,
+      sources: {
+        'laneform-base': {
+          type: 'raster', tiles: [baseTileURL(key)], tileSize: 256,
+          minzoom: 0, maxzoom: 22, attribution: '© TomTom'
+        }
+      },
+      layers: [
+        { id: 'laneform-base-layer', type: 'raster', source: 'laneform-base' }
+      ]
+    };
+    const map = new Map({
+      container: 'map', style, center: BUCHAREST, zoom: 12,
+      attributionControl: true, maxZoom: 20
+    });
+    state.map = map;
+    await new Promise((resolve, reject) => {
+      if (map.loaded()) { resolve(); return; }
+      const timer = setTimeout(() => reject(new Error('Map timed out while loading tiles.')), 25000);
+      map.once('load', () => { clearTimeout(timer); resolve(); });
+      map.on('error', (event) => {
+        // Some individual tile failures are recoverable. Keep rendering
+        // unless the map itself fails to initialize.
+        console.warn('MapLibre reported a tile/style error:', event.error);
+      });
+    });
     state.ready = true;
     try { sessionStorage.setItem('laneform.tomtom.key', key); } catch { /* storage disabled */ }
     el('setup').hidden = true;
@@ -60,16 +107,16 @@ async function connect() {
     el('connection').classList.add('connected');
     status('Map ready. Search for a destination, such as Piața Victoriei.');
     try {
-      state.traffic = await TrafficFlowModule.get(state.map, { visible: el('trafficToggle').checked });
-    } catch (err) {
-      console.warn('Optional traffic overlay unavailable:', err);
-      status('Map loaded; traffic overlay unavailable. Routes can still use traffic.');
+      setTrafficOverlay(el('trafficToggle').checked);
+    } catch (error) {
+      console.warn('Optional traffic overlay could not start:', error);
+      status('Map ready; traffic overlay unavailable. Routes still support traffic.');
     }
   } catch (err) {
     console.error('Map connection failed:', err);
     state.ready = false;
-    status('Map connection failed: ' + (err?.message || 'unknown error') + '. Check the browser console for details.', true);
-    try { state.map?.mapLibreMap?.remove(); } catch { /* no cleanup necessary */ }
+    status('Map connection failed: ' + (err?.message || 'unknown error'), true);
+    try { state.map?.remove(); } catch { /* no cleanup necessary */ }
     state.map = null;
   } finally {
     el('connect').disabled = false;
@@ -79,15 +126,15 @@ async function connect() {
 function showGPS(position) {
   const point = [position.coords.longitude, position.coords.latitude];
   state.gps = point;
-  if (state.map?.mapLibreMap) {
+  if (state.map) {
     if (!state.marker) {
       const dot = document.createElement('div');
       dot.className = 'gps-dot';
-      state.marker = new Marker({ element: dot }).setLngLat(point).addTo(state.map.mapLibreMap);
+      state.marker = new Marker({ element: dot }).setLngLat(point).addTo(state.map);
     } else {
       state.marker.setLngLat(point);
     }
-    state.map.mapLibreMap.flyTo({ center: point, zoom: 15 });
+    state.map.flyTo({ center: point, zoom: 15 });
   }
   status('GPS acquired (reported accuracy ±' + Math.round(position.coords.accuracy) + ' m).');
 }
@@ -110,16 +157,16 @@ function setOrigin(mode) {
 function getSelectedRoute() { return state.routes?.features?.[state.selected]; }
 function fitRoute() {
   const coordinates = getSelectedRoute()?.geometry?.coordinates;
-  if (!coordinates?.length || !state.map?.mapLibreMap) return;
+  if (!coordinates?.length || !state.map) return;
   const bounds = new LngLatBounds();
   coordinates.forEach((coord) => bounds.extend(coord));
-  state.map.mapLibreMap.fitBounds(bounds, {
+  state.map.fitBounds(bounds, {
     padding: { top: 100, right: 60, bottom: 100, left: window.innerWidth > 700 ? 455 : 45 },
     maxZoom: 16, duration: 650
   });
 }
 function drawRouteLines() {
-  const map = state.map?.mapLibreMap;
+  const map = state.map;
   if (!map || !map.isStyleLoaded() || !state.routes?.features?.length) return;
   const routes = state.routes.features;
   const sets = [
@@ -204,7 +251,7 @@ async function planRoute(refresh = false) {
     state.waypointMarkers.forEach((marker) => marker.remove());
     state.waypointMarkers = locations.map((coord, index) =>
       new Marker({ color: index === 0 ? '#d8f4a7' : '#f0f6ed' })
-        .setLngLat(coord).addTo(state.map.mapLibreMap)
+        .setLngLat(coord).addTo(state.map)
     );
     await renderRoutes();
     status('Routes use live traffic at calculation time. GPS tracking and rerouting are not implemented yet.');
@@ -224,7 +271,7 @@ el('gpsOrigin').addEventListener('click', () => setOrigin('gps'));
 el('locate').addEventListener('click', locate);
 el('fit').addEventListener('click', fitRoute);
 el('trafficToggle').addEventListener('change', (event) => {
-  try { state.traffic?.setVisible(event.target.checked); }
+  try { setTrafficOverlay(event.target.checked); }
   catch (err) { status('Traffic map layer unavailable: ' + err.message, true); }
 });
 try {
