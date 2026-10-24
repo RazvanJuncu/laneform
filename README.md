@@ -1,3 +1,10 @@
+> **Glide's development target is global.** Road routing should be available wherever
+> TomTom and map data support it; lane assistance should anticipate upcoming
+> turn-only lanes, lane endings, merges, and junctions. In the current alpha,
+> only evidence-backed lane markings are shown. See
+> [Global Lane Intelligence](docs/global-lane-intelligence.md) for the engine,
+> staged geographic coverage and validation requirements.
+
 # Glide — Navigation, refined.
 
 Glide is the visual brand. The GitHub repository and developer identifiers remain named Laneform to preserve deployment URLs and stored preferences. Personal-use navigation research prototype for Bucharest. **v0.2 is a route planner with a foreground GPS preview, NOT validated driving navigation.**

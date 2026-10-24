@@ -80,29 +80,36 @@ assert.ok(js.includes('revealPreviewFromSearch(searchRect)'),
 assert.ok(js.includes("getInstructionLanes") &&
   js.includes("extractRouteLaneGuidance(route, getInstructionLanes)"),
   'Lane guidance must come only from the SDK response of the selected route');
-assert.ok(js.includes("upcomingLaneGuidance(records,next,offset,480,nextState.index)"),
-  'Lane guidance must track only the actual upcoming turn, not an arrival message');
+assert.ok(js.includes("chooseLaneLookahead(laneRecords(route),offset"),
+  'Lane guidance must look forward along the route, not only at announced turns');
 assert.ok(js.includes("renderLaneAssistance(laneData)"),
   'Navigation HUD must update conditional lane assistance');
 assert.ok(existing.has('laneCoverage') && css.includes('.lane-rail'),
   'User needs source coverage diagnostics and contextual lane visualization');
 assert.ok(existing.has('previewLaneStatus') &&
-  js.includes("No mapped lane guidance on this route"),
-  'Preview must explicitly explain unavailable lane guidance');
+  js.includes("No mapped lane guidance in scanned corridor"),
+  'Preview must describe bounded, incomplete lane coverage');
 assert.ok(js.includes("nextManeuverState(instructions,offset,realLength)") &&
   js.includes("arrivalApproachText(nextState.instruction)"),
   'Arrival instructions must be guarded by distance to actual destination');
 console.log('Glide arrival regression and visible lane coverage connections passed.');
 assert.ok(js.includes('startOsmLaneLookup();') &&
   js.includes("fetchOsmLaneWays(route,signature)") &&
-  js.includes("osmLaneRecords(route)") &&
-  js.includes("provider.has(record.index)"),
-  'Lane assist must combine source-aware OSM markings with prioritized TomTom recommendations');
+  js.includes("laneEventsFromCorridor(route,state.osmWays)") &&
+  js.includes("buildLaneTimeline("),
+  'Lane assist must build a global event timeline from OSM and TomTom');
 assert.ok(js.includes("laneData.source==='osm'") &&
   js.includes('Mapped turn arrows'),
   'OSM markings must be labeled as unverified');
 assert.ok(html.includes('public OpenStreetMap Overpass API'),
   'Users must be told that maneuver coordinates are sent to Overpass');
+assert.ok(js.includes("const text = query; // Worldwide search") &&
+  !js.includes("query+', București, Romania'"),
+  'Destination search must not be geographically restricted to Bucharest');
+assert.ok(js.includes('horizonMeters:1100') &&
+  js.includes("state.osmCoverageMeters"),
+  'Proactive lane lookahead and bounded corridor reporting must be implemented');
+console.log('Glide global route corridor and predictive lane checks passed.');
 console.log('Glide multi-source lane integration and privacy checks passed.');
 console.log('Glide lane-assist UI connection checks passed.');
 console.log('Glide v3.3 centered search, ring icons and route trail checks passed.');
