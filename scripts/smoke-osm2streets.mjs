@@ -11,6 +11,7 @@ const xml=await readFile(resolve('public/lab-example.osm'),'utf8');
 const lib=await import(pathToFileURL(js).href);
 await lib.default(wasm);
 const network=new lib.JsStreetNetwork(xml,'',{
+  osm2lanes:false,
   debug_each_step:false,dual_carriageway_experiment:false,
   sidepath_zipping_experiment:false,inferred_sidewalks:false,
   inferred_kerbs:false,date_time:null,override_driving_side:''

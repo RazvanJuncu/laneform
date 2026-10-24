@@ -94,6 +94,7 @@ async function processOsm(xml){
   status('Reconstructing street lanes locally…');
   const lib=await engine();
   const config={
+    osm2lanes:false,
     debug_each_step:false,dual_carriageway_experiment:false,
     sidepath_zipping_experiment:false,inferred_sidewalks:false,
     inferred_kerbs:false,date_time:null,override_driving_side:''
