@@ -42,9 +42,28 @@ assert.ok(!html.includes('id="alternativesDetails"'),
   'Alternatives should not appear as a stacked details row');
 assert.ok(js.includes('function closeRoutesTray()') && js.includes('function toggleRoutesTray()'),
   'The separate routes tray must have open/close behavior');
-assert.ok(js.includes('isReducedMotion ? 0 : 810'),
+assert.ok(js.includes('isReducedMotion ? 0 : 930'),
   'Camera motion token should be slow and reduced-motion aware');
 assert.ok(css.includes('--pod-radius:34px') && css.includes('--control-radius:999px'),
   'New rounded geometry design tokens are required');
+for (const id of ['idleVeil','idlePrompt','navArrow','navDistance','navInstruction'])
+  assert.ok(existing.has(id),'Missing v3.2 bubble feature: '+id);
+assert.ok(html.includes('<div id="idleVeil" aria-hidden="true"></div>'),
+  'Idle map must have a passive dimming veil');
+assert.ok(/id="startPreview"[^>]*>Start<\/button>/.test(html),
+  'Start action must have no external-link arrow');
+assert.ok(!html.includes('class="nav-header"'),
+  'Do not show redundant navigation header or decorative dot');
+assert.ok(js.includes("permission.state !== 'granted'"),
+  'Startup geolocation must not prompt without prior browser permission');
+assert.ok(js.includes('centerInitialView();') && js.includes('center: DEMO_ORIGIN,'),
+  'Map must initialize at demo location and check granted location');
+assert.ok(js.includes("mapMarkerElement('destination-donut'") &&
+  js.includes("mapMarkerElement('route-origin-dot'"),
+  'New map markers must be donut and dot variants');
+assert.ok(css.includes('.destination-donut') && css.includes('#idleVeil') &&
+  css.includes('glide-idle-center'),
+  'V3.2 marker, dark veil and centered bubble styles are missing');
+console.log('Glide v3.2 borderless bubbles, location startup and donut marker checks passed.');
 console.log('Glide v3.1 pod, pill dock and weighted-motion checks passed.');
 console.log('Glide Interface v3 structural checks passed ('+ids.length+' components).');

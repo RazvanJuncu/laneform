@@ -19,11 +19,11 @@ const REQUEST_GAP = 12000;
 const SEARCH_GAP = 8000;
 const RECENT_LIMIT = 5;
 const isReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-const MOTION = isReducedMotion ? 0 : 810;
+const MOTION = isReducedMotion ? 0 : 930;
 const state = {
   map: null, mapReady: false, mode: 'idle',
   key: '', query: '', destinationName: '', destination: null,
-  originMode: 'demo', gps: null, gpsAt: 0, gpsMarker: null, originRequestId: 0,
+  originMode: 'demo', gps: null, gpsAt: 0, gpsMarker: null, originRequestId: 0, initialLocationChecked: false,
   routes: null, selected: 0, busy: false, routeMarkers: [],
   searchCache: new Map(), routeSignature: '', routeAt: 0, attemptAt: 0,
   lastSearchAt: 0, recents: [], searchMatches: [],
@@ -119,8 +119,8 @@ function setMode(mode) {
 // Traffic flow tiles are separate and only requested with a planned route.
 function initMap() {
   const map = new MapLibreMap({
-    container: 'map', style: structuredClone(mapStyle), center: BUCHAREST,
-    zoom: 11.8, maxZoom: 19.5, pitch: 0, bearing: 0,
+    container: 'map', style: structuredClone(mapStyle), center: DEMO_ORIGIN,
+    zoom: 14.8, maxZoom: 19.5, pitch: 0, bearing: 0,
     attributionControl: true, refreshExpiredTiles: false,
     antialias: true
   });
@@ -129,6 +129,7 @@ function initMap() {
     state.mapReady = true;
     $('mapState').classList.add('ready');
     $('mapState').querySelector('.map-state-label').textContent = 'Ready';
+    centerInitialView();
     requestDraw();
   });
   map.on('move', requestDraw);
@@ -138,6 +139,51 @@ function initMap() {
     requestDraw();
   });
   map.on('error', e => console.warn('Glide map tile/style issue:', e.error || e));
+}
+// The initial view is useful before any TomTom key is entered. Read GPS
+// automatically ONLY when the browser has already granted permission; do not
+// trigger a geolocation permission dialog on page load.
+async function centerInitialView() {
+  if (state.initialLocationChecked) return;
+  state.initialLocationChecked = true;
+  if (!navigator.geolocation || !navigator.permissions) return;
+  const requestId = state.originRequestId;
+  try {
+    const permission = await navigator.permissions.query({name:'geolocation'});
+    if (permission.state !== 'granted' || requestId !== state.originRequestId) return;
+    navigator.geolocation.getCurrentPosition(position => {
+      if (requestId !== state.originRequestId) return;
+      const point=[position.coords.longitude,position.coords.latitude];
+      if (!point.every(Number.isFinite)) return;
+      state.gps=point; state.gpsAt=Date.now();
+      state.originMode='gps';
+      showCurrentPosition(point);
+      updateOriginLabel();
+      if (state.mode === 'idle' || state.mode === 'search')
+        state.map.easeTo({center:point,zoom:15.5,pitch:0,bearing:0,
+          padding:{top:0,bottom:0,left:0,right:0},duration:MOTION});
+    }, error => {
+      // No prompt, no interruption, no retry loop: fall back to Răzoare.
+      console.info('Glide startup GPS unavailable:',error.message);
+    },{enableHighAccuracy:false,maximumAge:60000,timeout:6500});
+  } catch (error) {
+    console.info('Glide location permission cannot be queried:',error);
+  }
+}
+function mapMarkerElement(className,label){
+  const element=document.createElement('div');
+  element.className=className;
+  element.setAttribute('role','img');
+  element.setAttribute('aria-label',label);
+  return element;
+}
+function showCurrentPosition(point) {
+  if (!state.map) return;
+  if (state.gpsMarker) state.gpsMarker.setLngLat(point);
+  else state.gpsMarker=new Marker({
+    element:mapMarkerElement('current-position-dot','Current approximate position'),
+    anchor:'center'
+  }).setLngLat(point).addTo(state.map);
 }
 function routeSegments(feature) {
   const geometry = feature?.geometry;
@@ -238,8 +284,14 @@ function refreshMarkers() {
   state.routeMarkers = [];
   if (!state.routes) return;
   const start = origin();
-  if (start) state.routeMarkers.push(new Marker({color:'#BFC8CE',scale:.72}).setLngLat(start).addTo(state.map));
-  if (state.destination) state.routeMarkers.push(new Marker({color:'#F0F2F3',scale:.82}).setLngLat(state.destination).addTo(state.map));
+  if (start) state.routeMarkers.push(new Marker({
+    element:mapMarkerElement('route-origin-dot','Route starting point'),
+    anchor:'center'
+  }).setLngLat(start).addTo(state.map));
+  if (state.destination) state.routeMarkers.push(new Marker({
+    element:mapMarkerElement('destination-donut','Destination'),
+    anchor:'center'
+  }).setLngLat(state.destination).addTo(state.map));
   if (state.mode !== 'preview') state.routeMarkers.forEach(marker => {
     marker.getElement().style.display = 'none';
   });
@@ -315,12 +367,11 @@ function setOrigin(mode) {
     if (requestId !== state.originRequestId || state.originMode !== 'gps') return;
     state.gps = [position.coords.longitude, position.coords.latitude];
     state.gpsAt = Date.now();
-    if (!state.gpsMarker) {
-      const dot = document.createElement('div');
-      dot.className = 'gps-dot';
-      state.gpsMarker = new Marker({element: dot}).setLngLat(state.gps).addTo(state.map);
-    } else state.gpsMarker.setLngLat(state.gps);
+    showCurrentPosition(state.gps);
     updateOriginLabel();
+    if (state.mode==='search' || state.mode==='idle')
+      state.map.easeTo({center:state.gps,zoom:15.5,pitch:0,bearing:0,
+        duration:MOTION});
   }, error => {
     if (requestId !== state.originRequestId || state.originMode !== 'gps') return;
     state.originMode = 'demo';
@@ -354,6 +405,7 @@ function backToIdle() {
   setMode('idle');
   $('destination').blur();
   if (state.map) state.map.easeTo({
+    center:state.gps || DEMO_ORIGIN,zoom:state.gps?15.5:14.8,
     pitch:0,bearing:0,padding:{top:0,bottom:0,left:0,right:0},duration:MOTION
   });
 }
@@ -627,7 +679,7 @@ function navCamera(p,immediate=false){
   const padding={top:Math.round(h*.40),bottom:Math.round(h*.12),left:0,right:0};
   state.map.easeTo({
     center:p.point,bearing:p.angle,pitch:59,zoom:15.65,
-    padding,duration:immediate?MOTION:(isReducedMotion ? 0 : 890)
+    padding,duration:immediate?MOTION:(isReducedMotion ? 0 : 980)
   });
 }
 function navHud(){
@@ -798,7 +850,7 @@ function attachEvents() {
       navCamera(along(state.sim.distance),true);
     } else if(state.mode==='preview') overview();
     else state.map.easeTo({
-      center:BUCHAREST,zoom:11.8,pitch:0,bearing:0,
+      center:state.gps || DEMO_ORIGIN,zoom:state.gps?15.5:14.8,pitch:0,bearing:0,
       padding:{top:0,bottom:0,left:0,right:0},duration:MOTION
     });
   });

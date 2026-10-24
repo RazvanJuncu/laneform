@@ -17,6 +17,7 @@
 <div id="app">
   <div id="map" role="application" aria-label="Glide map of Bucharest"></div>
   <canvas id="routeOverlay" aria-hidden="true"></canvas>
+  <div id="idleVeil" aria-hidden="true"></div>
 
   <header class="topbar">
     <a class="wordmark" href="./" aria-label="Glide home" title="Glide"><img src="./glide-wordmark.svg" alt="GLIDE" width="125" height="22"></a>
@@ -89,7 +90,7 @@
           <span id="summaryLength">— km</span>
           <span id="summaryDelay" class="sr-only" aria-live="polite">Traffic considered</span>
         </div>
-        <button id="startPreview" type="button" class="start-button" title="Start route simulation" aria-label="Start simulated navigation">Start <span aria-hidden="true">↗</span></button>
+        <button id="startPreview" type="button" class="start-button" title="Start route simulation" aria-label="Start simulated navigation">Start</button>
       </div>
     </div>
 
@@ -102,11 +103,10 @@
     </div>
   </section>
 
-  <section id="navHUD" class="nav-hud sheet" hidden aria-label="Next simulated maneuver">
-    <div class="nav-header"><span>Route simulation</span><span class="nav-indicator"></span></div>
+  <section id="navHUD" class="nav-hud sheet" hidden aria-label="Next maneuver in simulated navigation">
     <div class="maneuver-content">
       <span id="navArrow" class="maneuver-arrow" aria-hidden="true">↗</span>
-      <div><strong id="navDistance">—</strong><p id="navInstruction">Preparing the route</p></div>
+      <div class="maneuver-copy"><strong id="navDistance">—</strong><p id="navInstruction">Preparing the route</p></div>
     </div>
     <div id="laneGuidance" class="lane-guidance" hidden aria-label="Verified lane guidance"></div>
   </section>

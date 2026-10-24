@@ -165,3 +165,13 @@ The route-preview screen has deliberately abandoned stacked information-card row
 - Motion uses weighted, non-spring easing with 530–650 ms UI entrance and approximately 810–890 ms map camera movements, honoring reduced-motion preferences. Safety-relevant text updates remain immediate.
 - TomTom usage is unchanged. The Routes tray only changes local UI state, and Traffic remains a manually initiated refresh. Route caching and throttling are retained.
 - User-designed wordmark, Satin Obsidian color system and OpenFreeMap cartography are unchanged.
+
+## Glide v3.2 — Quiet floating instruments
+
+- **Idle map:** centered on the fallback Răzoare demo position, zoomed in and gently dimmed. When the browser already granted location permission, Glide fetches one GPS position and centers on it. It **never prompts for new location permission automatically on startup**. If the browser has not granted location, it stays on the named demo origin. Users may explicitly choose *Use my location* in Search.
+- **Idle control:** the only primary action, `Where to?`, floats at the exact viewport center. It rises with an intentional ~830 ms animation, not a bounce.
+- **All bubbles:** light outlines have been removed from floating surfaces and controls. Shapes use flat, deep-charcoal fills with a directional shadow and (only sometimes) an exceptionally faint platinum glimmer. Search, route, settings and maneuver surfaces have rounded capsule/pod silhouettes.
+- **Maps:** conventional pin glyphs are replaced with a filled origin dot and a hollow platinum destination donut; current position has a softly haloed dot.
+- **Start:** now only reads `Start`, no external-link arrow; still explicitly labeled *Start simulated navigation* for assistive technology. Does not initiate live GPS navigation.
+- **Maneuver bubble:** removes the needless *Route simulation* header and decorative dot. Its width follows content within a safe maximum. The next maneuver retains legible distance and road instruction.
+- **Motion:** softened center rise, weighted lateral glide and intentional camera motion (~930 ms), disabled for reduced-motion users. No additional TomTom calls.

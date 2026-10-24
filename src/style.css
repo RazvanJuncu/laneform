@@ -441,3 +441,177 @@ body[data-mode="preview"] .map-fab{bottom:255px}
     animation:none!important
   }
 }
+
+/* GLIDE v3.2 — Floating instruments, no strokes.
+   "Glass" comes from soft separation and motion, not light border edges. */
+:root{
+ --bubble-fill:rgba(13,17,20,.955);
+ --bubble-strong:rgba(9,12,15,.975);
+ --bubble-shadow:0 15px 40px rgba(0,0,0,.28);
+ --bubble-glimmer:0 0 22px rgba(204,216,222,.045);
+ --glide-weight:cubic-bezier(.19,1,.22,1);
+}
+#idleVeil{
+ position:fixed;inset:0;z-index:3;pointer-events:none;
+ background:rgba(0,0,0,.24);opacity:0;
+ transition:opacity 950ms cubic-bezier(.22,.61,.36,1);
+}
+body[data-mode="idle"] #idleVeil{opacity:1}
+body[data-mode="search"] #idleVeil{opacity:.22}
+body[data-mode="preview"] #idleVeil,
+body[data-mode="navigation"] #idleVeil{opacity:0}
+
+/* Flat silhouettes; subtle shadow/glimmer is deliberately non-directional. */
+.sheet,.journey-pod,.journey-dock,.routes-tray,.idle-prompt,.map-fab,
+.icon-control,.bare-icon,.settings-panel,.nav-hud,.nav-bar,.search-sheet,
+.routes-tray .route-option,.route-option,.dock-control,.toast{
+ border:none!important;
+}
+.sheet,.journey-pod,.journey-dock,.routes-tray,.idle-prompt,.map-fab,
+.icon-control,.settings-panel,.nav-hud,.nav-bar,.search-sheet{
+ background:var(--bubble-fill);
+ box-shadow:var(--bubble-shadow);
+}
+.journey-pod{border-radius:34px}
+.journey-dock{border-radius:999px;box-shadow:0 9px 27px rgba(0,0,0,.26)}
+.routes-tray{border-radius:30px}
+.routes-tray .route-option{background:#1B2227;border-radius:999px}
+.routes-tray .route-option.selected{background:#303A40;color:#F2F4F5}
+.routes-tray .route-option.selected strong{color:#F2F4F5}
+.idle-prompt{
+ left:50%;top:50%;bottom:auto;right:auto;
+ width:min(430px,calc(100vw - 36px));min-height:74px;
+ padding:0 28px;border-radius:999px;
+ transform:translate(-50%,-50%);
+ font-weight:500;font-size:18px;letter-spacing:-.026em;
+ box-shadow:var(--bubble-shadow),var(--bubble-glimmer);
+ animation:glide-idle-center 830ms var(--glide-weight) both;
+ transition:background 320ms var(--glide-weight),box-shadow 340ms var(--glide-weight);
+}
+.idle-prompt:hover{
+ background:#171D21;
+ box-shadow:0 17px 43px rgba(0,0,0,.32),0 0 24px rgba(216,226,231,.065);
+}
+.search-sheet{border-radius:32px;animation:glide-search-float 670ms var(--glide-weight) both}
+.nav-hud{
+ width:max-content;
+ max-width:min(415px,calc(100vw - 44px));
+ padding:21px 24px;
+ border-radius:31px;
+ background:var(--bubble-strong);
+ box-shadow:0 14px 33px rgba(0,0,0,.28),0 0 16px rgba(211,223,229,.025);
+ animation:glide-maneuver-from-side 670ms var(--glide-weight) both;
+}
+.nav-hud .maneuver-content{
+ display:flex;align-items:flex-start;gap:16px;margin:0;
+}
+.nav-hud .maneuver-arrow{
+ width:44px;flex:0 0 44px;font-size:41px;line-height:1.05;color:#E7EAED;
+}
+.maneuver-copy{min-width:0;max-width:295px}
+.nav-hud .maneuver-copy strong{
+ display:block;line-height:1.06;font-size:35px;font-weight:600;letter-spacing:-.055em;
+}
+.nav-hud .maneuver-copy p{
+ display:block;margin:10px 0 0;
+ font-size:15px;line-height:1.37;font-weight:460;
+ color:#C8D0D5;overflow-wrap:break-word;
+}
+.nav-bar{
+ border-radius:32px;
+ animation:glide-bottom-dock 690ms var(--glide-weight) both;
+}
+.settings-panel{
+ border-radius:30px;
+ animation:glide-settings-from-side 660ms var(--glide-weight) both;
+}
+.settings-head .bare-icon{border-radius:50%}
+.icon-control,.map-fab{border-radius:50%}
+.map-fab{width:51px;height:51px}
+.tray-close{border-radius:50%}
+.journey-body .start-button,.start-button,.nav-actions .start-button{
+ border:0;border-radius:999px;box-shadow:none;
+}
+.journey-body .start-button:hover{
+ box-shadow:0 3px 19px rgba(210,221,226,.07);
+}
+.dock-control,.nav-actions .minimal-control{border:0;border-radius:999px}
+.dock-control:hover{background:#252C31}
+.search-input-wrap{border-color:#6C7981}
+.origin-options button{border:0;border-radius:999px;background:#222A2F}
+
+/* Map-native location glyphs: no commercial pin silhouettes. */
+.current-position-dot{
+ position:relative;width:15px;height:15px;border-radius:50%;
+ background:#DCE3E6;border:2px solid #0D1418;
+ box-shadow:0 0 0 6px rgba(220,228,231,.085),0 2px 13px rgba(0,0,0,.36);
+}
+.route-origin-dot{
+ width:13px;height:13px;border-radius:50%;
+ background:#E2E7EA;
+ box-shadow:0 0 0 4px rgba(210,223,228,.11),0 2px 10px rgba(0,0,0,.28);
+}
+.destination-donut{
+ position:relative;width:25px;height:25px;border-radius:50%;
+ background:#0C1115;
+ box-shadow:inset 0 0 0 4px #E7EAED,0 0 15px rgba(209,221,227,.12),
+ 0 3px 15px rgba(0,0,0,.34);
+}
+.destination-donut::after{
+ content:"";position:absolute;inset:9px;
+ border-radius:50%;background:#0B1115;
+}
+@keyframes glide-idle-center{
+ from{opacity:0;transform:translate(-50%,calc(-50% + 34px))}
+ to{opacity:1;transform:translate(-50%,-50%)}
+}
+@keyframes glide-search-float{
+ from{opacity:0;transform:translate(-50%,30px)}
+ to{opacity:1;transform:translate(-50%,0)}
+}
+@keyframes glide-maneuver-from-side{
+ from{opacity:0;transform:translate(-30px,9px)}
+ to{opacity:1;transform:translate(0,0)}
+}
+@keyframes glide-settings-from-side{
+ from{opacity:0;transform:translate(25px,-6px)}
+ to{opacity:1;transform:translate(0,0)}
+}
+@keyframes glide-bottom-dock{
+ from{opacity:0;transform:translate(-50%,25px)}
+ to{opacity:1;transform:translate(-50%,0)}
+}
+@media(max-width:760px){
+ .idle-prompt{
+  top:50%;bottom:auto;left:50%;right:auto;
+  width:calc(100vw - 34px);
+  min-height:70px;padding:0 24px;
+  transform:translate(-50%,-50%);
+  animation:glide-idle-center 830ms var(--glide-weight) both;
+ }
+ .search-sheet{
+  border-radius:32px 32px 0 0;
+  animation:glide-search-mobile 660ms var(--glide-weight) both;
+ }
+ .nav-hud{
+  left:10px;top:72px;width:max-content;
+  max-width:calc(100vw - 20px);padding:18px 20px;border-radius:28px;
+ }
+ .nav-hud .maneuver-copy{max-width:calc(100vw - 125px)}
+ .nav-hud .maneuver-copy strong{font-size:32px}
+ .nav-hud .maneuver-copy p{font-size:14px}
+ .nav-bar{border-radius:28px;animation:glide-bottom-mobile 690ms var(--glide-weight) both}
+}
+@keyframes glide-search-mobile{
+ from{opacity:0;transform:translateY(31px)}
+ to{opacity:1;transform:translateY(0)}
+}
+@keyframes glide-bottom-mobile{
+ from{opacity:0;transform:translateY(25px)}
+ to{opacity:1;transform:translateY(0)}
+}
+@media(prefers-reduced-motion:reduce){
+ #idleVeil{transition:none!important}
+ .idle-prompt,.search-sheet,.journey-pod,.journey-dock,.routes-tray,
+ .nav-hud,.nav-bar,.settings-panel{animation:none!important}
+}

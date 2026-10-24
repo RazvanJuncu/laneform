@@ -7,7 +7,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node scripts/check-ui.mjs"
+    "test": "node --check src/main.js && node scripts/check-ui.mjs"
   },
   "dependencies": {
     "@tomtom-org/maps-sdk": "1.0.0-rc.5",
