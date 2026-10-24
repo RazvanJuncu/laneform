@@ -72,7 +72,7 @@ assert.deepEqual(matchOsmLaneForManeuver(backwardRoute,
 
 assert.equal(deriveOsmLaneRecords(route,[way]).length,1);
 assert.equal(deriveOsmLaneRecords(route,[way])[0].index,0);
-assert.ok(routeLaneQuery(route).includes('way(around:125,'),
+assert.ok(routeLaneQuery(route).includes('way(around:120,'),
   'Overpass query must be bounded to maneuver approach points');
 assert.ok(routeLaneQuery(route).includes('out geom;'));
 assert.equal(routeLaneQuery({properties:{guidance:{instructions:[]}}}),null);

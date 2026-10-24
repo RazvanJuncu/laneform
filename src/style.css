@@ -774,3 +774,16 @@ body[data-mode="navigation"] #idleVeil{opacity:0}
 .lane-cell.osm-markings.recommended{background:#303D45;opacity:1;color:#DCE5EB}
 .lane-source{font-size:10px;color:#9AA9B3}
 .lane-availability{min-height:14px}
+
+/* Technical details only; retry is manual and subject to service cooldown. */
+.diagnostic-retry{
+  border:0;border-radius:999px;
+  min-height:38px;padding:0 17px;
+  background:#26313A;color:#D8E0E5;
+  font-size:11px;font-weight:550;
+}
+.diagnostic-retry:hover{background:#333F48}
+.diagnostic-retry:disabled{opacity:.55}
+.developer-details #laneCoverage{
+  color:#A7B4BE;line-height:1.55;overflow-wrap:anywhere;
+}

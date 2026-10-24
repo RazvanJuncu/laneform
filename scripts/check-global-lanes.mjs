@@ -63,7 +63,7 @@ assert.equal(chooseLaneLookahead(timeline,timeline[0].offset-300).source,'tomtom
 // A search corridor exists even with zero instructions. The source is
 // location-agnostic and rate-limited instead of fetching on every frame.
 const q=routeLaneQuery(route);
-assert.ok(q.includes('way(around:125,'));
+assert.ok(q.includes('way(around:120,'));
 assert.ok(q.includes('52.000000,13.'));
 assert.ok(!q.includes('Bucharest')&&!q.includes('București'));
 assert.ok(q.length<5500,'Global corridor request must remain bounded');

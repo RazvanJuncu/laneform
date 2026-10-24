@@ -39,7 +39,8 @@ const state = {
   osmCache: new WeakMap(),
   corridorCache: new WeakMap(), timelineCache: new WeakMap(),
   osmWays: [], osmStatus: 'not-checked', osmRequestId: 0, osmChecked: 0,
-  osmCoverageMeters: 0,
+  osmCoverageMeters: 0, osmRawWays: 0, osmProvider: '',
+  osmFailure: '', osmFailureKind: '', osmRetryAfter: 0,
   drawQueued: false, toastTimer: null,
   sim: { active: false, playing: false, follow: true, raf: null,
     lastFrame: 0, lastCamera: 0, marker: null,
@@ -237,54 +238,80 @@ function updateLaneCoverage() {
   const raw=route?.properties?.sections?.lanes?.length || 0;
   const total=route?.properties?.guidance?.instructions?.length || 0;
   const tomtom=tomtomLaneRecords(route).length;
-  const mapped=laneRecords(route).filter(x=>x.guidance.source==='osm').length;
+  const mapped=state.osmStatus==='ready'
+    ? laneRecords(route).filter(x=>x.guidance.source==='osm').length : null;
   const status=state.osmStatus;
-  const coverage=state.osmCoverageMeters ?
-    ' · first '+distance(state.osmCoverageMeters)+' scanned':'';
-  const statusMessage=status==='checking'?' · scanning OSM corridor…'
-    : status==='unavailable'?' · OSM lookup unavailable'
-    : status==='rate-limited'?' · OSM lookup deferred'
-    : status==='no-geometry'?' · no usable route geometry'
-    : status==='ready'?' · OSM scan complete'+coverage:'';
+  const scan=state.osmCoverageMeters
+    ? ' · first '+distance(state.osmCoverageMeters) : '';
+  let osmText;
+  if(status==='ready') {
+    osmText='OSM: '+state.osmRawWays+' tagged roads retrieved; '+
+      mapped+' route-matched lane events'+scan+
+      ' · '+state.osmProvider+'. Only part of the route was checked.';
+  } else if(status==='checking'){
+    osmText='OSM: checking mapped lane markings…';
+  } else if(status==='unavailable'){
+    osmText='OSM: NOT CHECKED — '+(state.osmFailure || 'source unreachable')+
+      ' ('+(state.osmFailureKind||'service failure')+').';
+  } else if(status==='too-large'){
+    osmText='OSM: NOT CHECKED — query exceeded safe data limits.';
+  } else if(status==='rate-limited'){
+    osmText='OSM: NOT CHECKED — request cooldown'+
+      (state.osmRetryAfter?' ('+state.osmRetryAfter+'s remaining)':'')+'.';
+  } else if(status==='no-geometry'){
+    osmText='OSM: NOT CHECKED — missing route geometry.';
+  } else osmText='OSM: not yet checked.';
   $('laneCoverage').textContent=route
-    ? 'Global lane lookahead · TomTom '+tomtom+'/'+total+' maneuvers ('+
-      raw+' raw sections). OSM '+mapped+' candidate junctions.'+
-      statusMessage+'. Mapped markings are unverified; remaining route may be unscanned.'
-    : 'Lane sources: shown after a route is calculated';
+    ? 'TomTom: '+tomtom+' lane-guided maneuvers / '+total+
+      ' instructions ('+raw+' raw lane sections). '+osmText+
+      ' OSM arrows are unverified road markings, not lane connectivity.'
+    : 'Lane sources appear after route planning.';
+  const retry=$('retryLaneLookup');
+  if(retry){
+    retry.hidden=!route || !['unavailable','rate-limited'].includes(status);
+    retry.disabled=status==='checking';
+  }
   const preview=$('previewLaneStatus');
   if(preview){
+    const tt=tomtom ? tomtom+' TomTom' : 'No TomTom lane guidance';
     preview.textContent=!route?''
-      : tomtom||mapped
-        ? 'Lane lookahead · '+tomtom+' TomTom · '+mapped+' mapped'+
-          (status==='checking'?' · scanning…':'')
-        : status==='checking'?'Scanning for lane changes ahead…'
-        : status==='ready'?'No mapped lane guidance in scanned corridor'
-        : status==='unavailable'?'Lane lookup unavailable'
-        : status==='rate-limited'?'Lane lookup deferred'
-        : 'No mapped lanes yet';
+      : status==='ready'
+        ? 'Lane lookahead · '+tt+' · '+mapped+' OSM mapped'
+        : status==='checking'?'Lane lookahead · '+tt+' · checking OSM…'
+        : status==='unavailable'?'Lane lookahead · '+tt+' · OSM unavailable'
+        : status==='rate-limited'?'Lane lookahead · '+tt+' · OSM deferred'
+        : status==='too-large'?'Lane lookahead · '+tt+' · OSM scan too large'
+        : 'Lane lookahead · '+tt+' · OSM not checked';
     preview.title=route
-      ? 'TomTom recommendations and OSM painted turn-arrow tags. '+
-        'OSM is not lane connectivity. Scanning is bounded to the route ahead.'
+      ? 'Only completed OSM scans have a meaningful match count. '+
+        'Mapped turn arrows are not verified lane connections.'
       : '';
   }
 }
-function startOsmLaneLookup() {
+function startOsmLaneLookup({force=false}={}) {
   const route=selectedRoute();
   if(!route)return;
   const requestId=++state.osmRequestId;
   state.osmWays=[];state.osmCache=new WeakMap();
   state.corridorCache=new WeakMap();state.timelineCache=new WeakMap();
   state.osmStatus='checking';state.osmChecked=0;state.osmCoverageMeters=0;
+  state.osmRawWays=0;state.osmProvider='';
+  state.osmFailure='';state.osmFailureKind='';state.osmRetryAfter=0;
   updateLaneCoverage();
   const signature=state.routeSignature;
-  // ONE public OSM request for relevant maneuver approaches after a deliberate
-  // route calculation. No extra TomTom calls, no map-move polling.
-  void fetchOsmLaneWays(route,signature).then(result=>{
+  // The optional OSM lookup is bounded, cached and explicitly manual on retry.
+  // It never uses additional TomTom requests or runs during route playback.
+  void fetchOsmLaneWays(route,signature,{force}).then(result=>{
     if(requestId!==state.osmRequestId)return;
     state.osmStatus=result.status;
-    state.osmChecked=result.checked;
-    state.osmWays=result.ways;
-    state.osmCoverageMeters=result.coverageMeters || 0;
+    state.osmChecked=result.checked||0;
+    state.osmWays=result.ways||[];
+    state.osmRawWays=result.wayCount||0;
+    state.osmProvider=result.source||'';
+    state.osmFailure=result.reason||'';
+    state.osmFailureKind=result.errorKind||'';
+    state.osmRetryAfter=result.retryAfterSeconds||0;
+    state.osmCoverageMeters=result.coverageMeters||0;
     state.osmCache=new WeakMap();
     state.corridorCache=new WeakMap();state.timelineCache=new WeakMap();
     updateLaneCoverage();
@@ -292,7 +319,8 @@ function startOsmLaneLookup() {
   }).catch(error=>{
     if(requestId!==state.osmRequestId)return;
     console.warn('Optional OSM lane lookup unavailable:',error);
-    state.osmStatus='unavailable';
+    state.osmStatus='unavailable';state.osmFailure='Browser network error';
+    state.osmFailureKind='network';
     state.osmWays=[];state.osmCache=new WeakMap();
     state.corridorCache=new WeakMap();state.timelineCache=new WeakMap();
     updateLaneCoverage();
@@ -1027,6 +1055,7 @@ function attachEvents() {
   $('saveKey').addEventListener('click',saveKey);
   $('apiKey').addEventListener('keydown',event=>{if(event.key==='Enter')saveKey();});
   $('trafficToggle').addEventListener('change',updateTrafficVisibility);
+  $('retryLaneLookup').addEventListener('click',()=>startOsmLaneLookup({force:true}));
   $('backToPlanning').addEventListener('click',()=>{
     // Keep the calculated route in memory, but hide it during a new search.
     state.routeMarkers.forEach(x=>x.getElement().style.display='none');

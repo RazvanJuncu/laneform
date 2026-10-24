@@ -87,21 +87,21 @@ assert.ok(js.includes("renderLaneAssistance(laneData)"),
 assert.ok(existing.has('laneCoverage') && css.includes('.lane-rail'),
   'User needs source coverage diagnostics and contextual lane visualization');
 assert.ok(existing.has('previewLaneStatus') &&
-  js.includes("No mapped lane guidance in scanned corridor"),
+  js.includes("Only completed OSM scans have a meaningful match count"),
   'Preview must describe bounded, incomplete lane coverage');
 assert.ok(js.includes("nextManeuverState(instructions,offset,realLength)") &&
   js.includes("arrivalApproachText(nextState.instruction)"),
   'Arrival instructions must be guarded by distance to actual destination');
 console.log('Glide arrival regression and visible lane coverage connections passed.');
 assert.ok(js.includes('startOsmLaneLookup();') &&
-  js.includes("fetchOsmLaneWays(route,signature)") &&
+  js.includes("fetchOsmLaneWays(route,signature,{force})") &&
   js.includes("laneEventsFromCorridor(route,state.osmWays)") &&
   js.includes("buildLaneTimeline("),
   'Lane assist must build a global event timeline from OSM and TomTom');
 assert.ok(js.includes("laneData.source==='osm'") &&
   js.includes('Mapped turn arrows'),
   'OSM markings must be labeled as unverified');
-assert.ok(html.includes('public OpenStreetMap Overpass API'),
+assert.ok(html.includes('public OpenStreetMap Overpass service'),
   'Users must be told that maneuver coordinates are sent to Overpass');
 assert.ok(js.includes("const text = query; // Worldwide search") &&
   !js.includes("query+', București, Romania'"),
@@ -112,6 +112,13 @@ assert.ok(js.includes('horizonMeters:1100') &&
 assert.ok(js.includes("nextManeuver:nextState,instructions"),
   'HUD lane cue must use actual next maneuver to block later intersections');
 console.log('Glide route-ordered lane guidance regression wiring passed.');
+assert.ok(existing.has('retryLaneLookup') &&
+  js.includes("startOsmLaneLookup({force:true})"),
+  'Manual OSM retry must be wired in technical details');
+assert.ok(js.includes("OSM: NOT CHECKED") &&
+  js.includes("state.osmRawWays") && js.includes("state.osmProvider"),
+  'Diagnostics must distinguish failed network lookup from mapped evidence count');
+console.log('Glide clear lane-source diagnostics and retry wiring passed.');
 console.log('Glide global route corridor and predictive lane checks passed.');
 console.log('Glide multi-source lane integration and privacy checks passed.');
 console.log('Glide lane-assist UI connection checks passed.');

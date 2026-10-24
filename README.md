@@ -270,3 +270,44 @@ reliable legal/restriction information. Until such coverage is available, the
 UI must suppress conflicting or distant recommendations rather than claiming
 a verified path. A regression test reproduces the exact 252 m left / 653 m
 right sequence.
+
+## OSM lookup reliability / coverage diagnostics
+
+A real route returned TomTom lane recommendations for 3/15 instructions while the
+public Overpass lookup was unavailable. That is a data-acquisition failure,
+**not evidence that OSM has zero mapped lane annotations**.
+
+The prototype now:
+- Uses **one Overpass linestring proximity filter** following the first 3.7 km
+  of the route, replacing the original 20 overlapping `around` way filters.
+  This query shape is documented by Overpass QL and conserves server work.
+- Uses public **Private.coffee Overpass** with OSM Germany as a secondary
+  fallback for network errors, timeouts and HTTP 502/503/504 only. It never
+  hops to another server after HTTP 429 (rate limit) or 400 (bad query).
+  Both are best-effort shared public services, not a production SLA.
+- Preserves the in-tab 20-minute successful cache, a 2-minute failed-result
+  cache, 30-second minimum interval between separate lookups, max two
+  endpoints per explicit request and no per-frame polling. A manual **Retry
+  OSM lookup** button appears only when the optional data lookup fails/is
+  deferred, and honors the cooldown. No additional TomTom requests.
+- Shows **TomTom lane-enabled maneuvers** separately from raw returned
+  sections. When OSM fails, displays **NOT CHECKED** plus the reason. Only
+  after a successful OSM response will it show numbers for downloaded
+  tagged ways and route-matched lane events.
+- Shows which public Overpass instance answered a successful query and
+  the length of the initial route section actually scanned. This prevents
+  interpreting a partial scan as complete worldwide coverage.
+- Keeps source confidence conservative: no data results in no new
+  suggestions, and OSM turn-arrow markings are not confirmed lane
+  connectivity. The application is still a stationary simulator.
+
+`scripts/check-osm-source.mjs` uses mock network responses to verify
+Overpass query structure, transient failover, HTTP 429/400 non-failover and
+the distinction between a successful zero-result scan and service failure.
+It does not prove browser CORS, live availability, or the mapping completeness
+of an actual road corridor.
+
+**Scale requirement:** Replace direct public Overpass queries with a
+self-hosted regional/global lane-data index (OSM extracts, diffs, licensed
+imagery and road authority information). Public shared endpoints aren't
+suitable for global turn-by-turn lane guidance at scale.
