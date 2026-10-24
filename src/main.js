@@ -1,7 +1,7 @@
 import { TomTomConfig } from '@tomtom-org/maps-sdk/core';
 import { TomTomMap, RoutingModule, TrafficFlowModule } from '@tomtom-org/maps-sdk/map';
-import { calculateRoute, search } from '@tomtom-org/maps-sdk/services';
-import maplibregl from 'maplibre-gl';
+import { calculateRoute, discoverPlaces } from '@tomtom-org/maps-sdk/services';
+import { Marker, LngLatBounds } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 
@@ -68,7 +68,7 @@ function showGPS(position) {
     if (!state.marker) {
       const dot = document.createElement('div');
       dot.className = 'gps-dot';
-      state.marker = new maplibregl.Marker({ element: dot }).setLngLat(point).addTo(state.map.mapLibreMap);
+      state.marker = new Marker({ element: dot }).setLngLat(point).addTo(state.map.mapLibreMap);
     } else {
       state.marker.setLngLat(point);
     }
@@ -96,7 +96,7 @@ function getSelectedRoute() { return state.routes?.features?.[state.selected]; }
 function fitRoute() {
   const coordinates = getSelectedRoute()?.geometry?.coordinates;
   if (!coordinates?.length || !state.map?.mapLibreMap) return;
-  const bounds = new maplibregl.LngLatBounds();
+  const bounds = new LngLatBounds();
   coordinates.forEach((coord) => bounds.extend(coord));
   state.map.mapLibreMap.fitBounds(bounds, {
     padding: { top: 100, right: 60, bottom: 100, left: window.innerWidth > 700 ? 455 : 45 },
@@ -150,7 +150,7 @@ async function planRoute(refresh = false) {
   try {
     if (!refresh || !state.destination) {
       const text = /bucurești|bucharest/i.test(query) ? query : query + ', București, Romania';
-      const results = await search({ query: text, geoBias: { position: BUCHAREST }, limit: 5 });
+      const results = await discoverPlaces({ query: text, geoBias: { position: BUCHAREST }, limit: 5 });
       const place = results.features?.[0];
       if (!place?.geometry?.coordinates) throw new Error('Destination not found. Try a precise address.');
       state.destination = place.geometry.coordinates;
