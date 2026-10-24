@@ -80,3 +80,9 @@ Production caveats: provider quotas/terms apply, and a standalone GitHub Pages s
 - Simplify details behind disclosure. Map and route are the hierarchy; minimal logo is typographic pending final user-supplied artwork.
 - The initial dark map treatment applies low-saturation, reduced-brightness filters to TomTom's existing raster tiles. It is not yet a fully custom vector style with separately controlled roads and labels, which will be a later iteration.
 - Independent canvas route overlay retains a native MapLibre route layer as a fallback. Actual route rendering must be tested with the user's TomTom key.
+
+## Glide v0.4 — interactive route walkthrough
+
+Once a route has been calculated, press **Explore route**. A simulated marker moves along its already-calculated geometry at an accelerated 12× speed. The HUD displays the next maneuver when route-offset guidance is available, remaining route distance, and estimated remaining travel time. Playback, pausing, and scrubbing use **no additional TomTom Routing or Search API calls**.
+
+Camera following is off by default because moving the map can load additional tiles. The walkthrough is not live GPS navigation, does not simulate actual traffic, and is **not validated for active driving**. Live GPS follow remains a separate stationary-preview tool. Real map-matched navigation and lane-level instructions are not implemented yet.

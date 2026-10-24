@@ -21,7 +21,10 @@ const state = {
   placeCache: new Map(), lastRouteSignature: null, lastRouteAt: 0,
   lastRouteAttemptAt: 0, trafficExplicit: false, lastTrafficAt: 0,
   requestCounts: { search: 0, route: 0 },
-  routeCanvas: null, routeDrawScheduled: false, lastNativeRouteId: null
+  routeCanvas: null, routeDrawScheduled: false, lastNativeRouteId: null,
+  walkthrough: { active: false, playing: false, distance: 0, length: 0,
+    points: [], cumulative: [], marker: null, raf: null, previousFrame: 0,
+    lastCameraAt: 0, lastDisplayAt: 0 }
 };
 function normalizedQuery(query) {
   return query.trim().normalize('NFKC').toLocaleLowerCase('ro-RO').replace(/\s+/g,' ');
@@ -186,6 +189,7 @@ async function connect() {
     TomTomConfig.instance.put({ apiKey: key, language: 'en-GB' });
     // Skip the old world-tile probe: it added a paid tile request that
     // MapLibre would never use for a Bucharest viewport.
+    if (state.walkthrough.active) exitWalkthrough();
     if (state.watchId !== null) stopGPSFollow();
     if (state.map) state.map.remove();
     if (state.routeCanvas) state.routeCanvas.remove();
@@ -222,7 +226,7 @@ async function connect() {
     el('planner').hidden = false;
     el('connection').textContent = 'CONNECTED';
     el('connection').classList.add('connected');
-    status('Map connected. No traffic tiles are downloaded until you plan a route or explicitly enable congestion.');
+    status('Map ready. Choose a destination.');
     try {
       setTrafficOverlay(el('trafficToggle').checked);
     } catch (error) {
@@ -322,7 +326,8 @@ function fitRoute() {
       bounds.extend(coord);
   }));
   state.map.fitBounds(bounds, {
-    padding: { top: 86, right: 70, bottom: 115, left: window.innerWidth > 740 ? 425 : 70 },
+    padding: { top: 86, right: 70, bottom: 115,
+      left: state.walkthrough.active ? 70 : (window.innerWidth > 740 ? 425 : 70) },
     maxZoom: 16, duration: MOTION_MS
   });
 }
@@ -579,6 +584,162 @@ function toggleGPSFollow() {
     {enableHighAccuracy:true,maximumAge:2500,timeout:12000}
   );
 }
+
+/* Route walkthrough: simulates a journey entirely from a route already
+ * calculated in the browser. No new Routing or Search API requests. */
+const SIMULATED_SPEED_MPS = (50 / 3.6) * 12;
+function distanceBetween(a, b) {
+  const r = 6371000, rad = Math.PI / 180;
+  const dLat = (b[1] - a[1]) * rad, dLon = (b[0] - a[0]) * rad;
+  const aa = Math.sin(dLat/2)**2 + Math.cos(a[1]*rad)*Math.cos(b[1]*rad)*Math.sin(dLon/2)**2;
+  return r * 2 * Math.atan2(Math.sqrt(aa), Math.sqrt(1-aa));
+}
+function buildWalkthroughPath(route) {
+  const points = [];
+  getRouteSegments(route).forEach(segment => segment.forEach(p => {
+    if (!Array.isArray(p) || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) return;
+    const prev = points[points.length-1];
+    if (!prev || distanceBetween(prev,p) > 0.1) points.push(p);
+  }));
+  const cumulative = [0];
+  for (let i=1;i<points.length;i++)
+    cumulative.push(cumulative[i-1]+distanceBetween(points[i-1],points[i]));
+  return {points,cumulative,length:cumulative[cumulative.length-1] || 0};
+}
+function pointAlongRoute(meters) {
+  const w=state.walkthrough;
+  if (w.points.length<2) return null;
+  const d=Math.max(0,Math.min(w.length,meters));
+  let lo=1,hi=w.cumulative.length-1;
+  while(lo<hi) {
+    const mid=(lo+hi)>>1;
+    if(w.cumulative[mid]<d) lo=mid+1; else hi=mid;
+  }
+  const ix=Math.max(1,lo),a=w.points[ix-1],b=w.points[ix];
+  const length=Math.max(0.01,w.cumulative[ix]-w.cumulative[ix-1]);
+  const t=Math.max(0,Math.min(1,(d-w.cumulative[ix-1])/length));
+  const coord=[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t];
+  const bearing=Math.atan2((b[0]-a[0])*Math.cos(coord[1]*Math.PI/180),
+    b[1]-a[1])*180/Math.PI;
+  return {coord,bearing};
+}
+function refreshWalkthroughHUD() {
+  const w=state.walkthrough;
+  if(!w.active) return;
+  const route=getSelectedRoute();
+  const summary=route?.properties?.summary || {};
+  const fraction=w.length?w.distance/w.length:0;
+  const reportedLength=summary.lengthInMeters || w.length;
+  const offset=reportedLength*fraction;
+  const instructions=route?.properties?.guidance?.instructions || [];
+  const next=instructions.find(x=>Number.isFinite(x.routeOffsetInMeters) &&
+    x.routeOffsetInMeters>offset+10);
+  el('navDistance').textContent=next
+    ? distance(Math.max(0,next.routeOffsetInMeters-offset)):'Arriving';
+  el('navInstruction').textContent=next
+    ? instructionLabel(next):'Approaching your destination';
+  el('navRemaining').textContent=distance(Math.max(0,reportedLength-offset))+' left';
+  const seconds=(summary.travelTimeInSeconds || 0)*(1-fraction);
+  el('navETA').textContent=seconds>1?Math.ceil(seconds/60)+' min estimated':'At destination';
+  el('navScrub').value=String(Math.round(fraction*1000));
+  el('navScrub').style.setProperty('--route-progress',(fraction*100).toFixed(1)+'%');
+}
+function updateWalkthrough(meters,immediate=false) {
+  const w=state.walkthrough;
+  if(!w.active) return;
+  w.distance=Math.max(0,Math.min(w.length,meters));
+  const point=pointAlongRoute(w.distance);
+  if(!point) return;
+  w.marker.setLngLat(point.coord);
+  w.marker.setRotation(point.bearing);
+  const now=performance.now();
+  if(immediate || now-w.lastDisplayAt>85 || w.distance===w.length) {
+    refreshWalkthroughHUD();
+    w.lastDisplayAt=now;
+  }
+  if(el('navFollowCamera').checked &&
+     (immediate || now-w.lastCameraAt>1100)) {
+    state.map.easeTo({center:point.coord,zoom:15,duration:immediate?0:480});
+    w.lastCameraAt=now;
+  }
+  if(w.distance>=w.length) pauseWalkthrough();
+}
+function pauseWalkthrough() {
+  const w=state.walkthrough;
+  w.playing=false;
+  if(w.raf!=null) cancelAnimationFrame(w.raf);
+  w.raf=null;w.previousFrame=0;
+  el('navPlayPause').textContent=w.distance>=w.length?'Replay':'Play';
+}
+function walkthroughFrame(now) {
+  const w=state.walkthrough;
+  if(!w.active || !w.playing) return;
+  if(w.previousFrame) {
+    const seconds=Math.max(0,Math.min(0.12,(now-w.previousFrame)/1000));
+    updateWalkthrough(w.distance+seconds*SIMULATED_SPEED_MPS);
+  }
+  w.previousFrame=now;
+  if(w.playing) w.raf=requestAnimationFrame(walkthroughFrame);
+}
+function playWalkthrough() {
+  const w=state.walkthrough;
+  if(!w.active||w.playing)return;
+  if(w.distance>=w.length) updateWalkthrough(0,true);
+  w.playing=true;w.previousFrame=0;
+  el('navPlayPause').textContent='Pause';
+  w.raf=requestAnimationFrame(walkthroughFrame);
+}
+function startWalkthrough() {
+  const route=getSelectedRoute();
+  if(!state.ready || !route) return;
+  const path=buildWalkthroughPath(route);
+  if(path.points.length<2 || path.length<1) {
+    status('This route has no usable line geometry for preview.',true);return;
+  }
+  if(state.watchId!==null)stopGPSFollow();
+  const w=state.walkthrough;
+  Object.assign(w,path,{active:true,playing:false,distance:0,raf:null,
+    previousFrame:0,lastCameraAt:0,lastDisplayAt:0});
+  const element=document.createElement('div');
+  element.className='walkthrough-marker';
+  w.marker=new Marker({element,rotationAlignment:'map'})
+    .setLngLat(path.points[0]).addTo(state.map);
+  state.waypointMarkers.forEach(marker=>{marker.getElement().style.display='none';});
+  el('app').classList.add('walkthrough-mode');
+  el('navHUD').hidden=false;
+  el('navControls').hidden=false;
+  el('navFollowCamera').checked=false;
+  refreshWalkthroughHUD();
+  fitRoute();
+  // Intentionally start PAUSED; moving the camera is opt-in to save tiles.
+}
+function exitWalkthrough() {
+  const w=state.walkthrough;
+  if(!w.active)return;
+  pauseWalkthrough();
+  w.marker?.remove();w.marker=null;w.active=false;
+  el('app').classList.remove('walkthrough-mode');
+  el('navHUD').hidden=true;
+  el('navControls').hidden=true;
+  state.waypointMarkers.forEach(marker=>{marker.getElement().style.display='';});
+  if(state.ready)fitRoute();
+}
+el('startWalkthrough').addEventListener('click',startWalkthrough);
+el('navExit').addEventListener('click',exitWalkthrough);
+el('navPlayPause').addEventListener('click',()=>{
+  if(state.walkthrough.playing)pauseWalkthrough();else playWalkthrough();
+});
+el('navScrub').addEventListener('input',event=>{
+  pauseWalkthrough();
+  updateWalkthrough(state.walkthrough.length*Number(event.target.value)/1000,true);
+});
+el('navFollowCamera').addEventListener('change',event=>{
+  if(event.target.checked)updateWalkthrough(state.walkthrough.distance,true);
+  else fitRoute();
+});
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden && state.walkthrough.playing)pauseWalkthrough();
+});
 el('connect').addEventListener('click', connect);
 el('apiKey').addEventListener('keydown', (event) => { if (event.key === 'Enter') connect(); });
 el('plan').addEventListener('click', () => planRoute());

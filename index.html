@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-title" content="Glide">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="description" content="Glide — a calmer way to navigate. Traffic-aware route planning, thoughtfully simplified.">
-  <title>Glide — Navigation, refined.</title>
+  <title>Glide — Navigation</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650;700;750;800&display=swap" rel="stylesheet">
@@ -21,11 +21,11 @@
     <div class="brand">
       <span class="brand-wordmark">glide<span class="brand-stop">.</span></span>
       <span class="brand-divider"></span>
-      <span class="brand-caption">NAVIGATION, REFINED</span>
+      
     </div>
     <div class="header-right">
       <span id="connection" class="connection">DISCONNECTED</span>
-      <span class="version">PREVIEW / 0.3</span>
+      
     </div>
   </header>
   <main class="panel" id="plannerPanel">
@@ -66,10 +66,11 @@
         <div class="section-divider"></div>
         <div class="section-heading">
           <p class="eyebrow">ROUTE OPTIONS</p>
-          <span class="section-subhead">Traffic considered</span>
+          
         </div>
         <div id="routeChoices" class="choices"></div>
         <div id="routeSummary" class="summary" aria-live="polite"></div>
+        <button type="button" id="startWalkthrough" class="primary start-walkthrough">Explore route <span aria-hidden="true">↗</span></button>
         <div class="route-actions">
           <button type="button" id="refresh" class="secondary wide">↻ &nbsp; Check traffic again</button>
           <button type="button" id="followGPS" class="secondary wide">◎ &nbsp; Follow GPS (preview)</button>
@@ -90,13 +91,30 @@
       <p id="usage" class="usage">This tab: 0 searches · 0 route calls · map tiles not counted</p>
       <p class="helper">Navigation and lane guidance are not validated. Follow road signs and markings.</p>
     </details>
-    <p class="footer"><span class="status-dot"></span>Experimental route planning · Not for active driving</p>
+    <p class="footer"><span class="status-dot"></span>Route preview · Not validated for driving</p>
   </main>
   <div class="map-controls">
     <button id="locate" type="button" aria-label="Center on location" title="Locate">◎</button>
     <button id="fit" type="button" aria-label="Show entire route" title="Show route">⤢</button>
   </div>
-  <div class="map-credit">GLIDE / BUCHAREST PREVIEW</div>
+  <section id="navHUD" class="nav-hud" aria-label="Simulated route walkthrough" hidden>
+    <div class="nav-hud-kicker">ROUTE WALKTHROUGH <span>SIMULATED</span></div>
+    <div id="navDistance" class="nav-next-distance">—</div>
+    <div id="navInstruction" class="nav-instruction">Upcoming maneuver</div>
+    <div class="nav-hud-footer"><span id="navRemaining">— left</span><span id="navETA">— min</span></div>
+  </section>
+  <section id="navControls" class="nav-controls" aria-label="Route walkthrough controls" hidden>
+    <div class="nav-playback-row">
+      <span>Route walkthrough</span>
+      <span class="nav-playback-note">12× simulated · no routing calls</span>
+    </div>
+    <input id="navScrub" type="range" min="0" max="1000" step="1" value="0" aria-label="Position along the route">
+    <div class="nav-control-buttons">
+      <button id="navPlayPause" type="button" class="nav-play-button">Play</button>
+      <label class="nav-camera-label"><input id="navFollowCamera" type="checkbox"> Follow camera <small>uses map tiles</small></label>
+      <button id="navExit" type="button" class="nav-exit-button">Exit preview</button>
+    </div>
+  </section>
 </div>
 <script type="module" src="/src/main.js"></script>
 </body>

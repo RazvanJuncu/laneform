@@ -213,3 +213,52 @@ button.secondary.active { border-color: var(--signal); color: var(--signal); }
 @media (prefers-reduced-motion: reduce) {
   *,*::before,*::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }
+
+/* GLIDE / 0.4 — route walkthrough; reduce chrome around the map */
+.topbar{height:68px;background:#0B0F12f2;border-bottom:1px solid rgba(140,152,164,.12)}
+.brand-divider,.brand-caption,.version,.map-credit{display:none!important}
+.panel{top:86px;bottom:auto;max-height:calc(100dvh - 108px);width:378px;padding:25px 24px 17px;background:#12181DF7;box-shadow:0 18px 44px #00000033;backdrop-filter:none}
+.heading{margin-bottom:23px}
+.heading h1{font-size:27px;letter-spacing:-.055em;margin:0}
+.map-veil{background:none}
+.start-walkthrough{margin:14px 0 5px}
+.walkthrough-mode .panel{opacity:0;pointer-events:none;transform:translateX(-24px)}
+.panel{transition:opacity .24s var(--ease-glide),transform .3s var(--ease-glide)}
+.nav-hud{position:fixed;z-index:8;top:91px;left:22px;width:370px;max-width:calc(100vw - 44px);padding:24px 25px;background:#12181DF7;border:1px solid #354047;border-radius:9px;box-shadow:0 14px 38px #0004}
+.nav-hud-kicker{display:flex;justify-content:space-between;gap:10px;color:#98A5B0;font-weight:700;font-size:10px;letter-spacing:.11em}
+.nav-hud-kicker span{color:#D7F36A;letter-spacing:.06em}
+.nav-next-distance{font-size:46px;font-variant-numeric:tabular-nums;letter-spacing:-.055em;font-weight:650;line-height:1.15;margin:19px 0 6px;color:#D7F36A}
+.nav-instruction{font-size:21px;line-height:1.35;letter-spacing:-.035em;font-weight:600;color:#D8E0E7;min-height:60px;overflow-wrap:anywhere}
+.nav-hud-footer{display:flex;justify-content:space-between;gap:12px;padding-top:18px;margin-top:18px;border-top:1px solid #303A40;font-size:12px;color:#A6B4BB}
+.nav-controls{position:fixed;z-index:8;bottom:25px;left:50%;transform:translateX(-50%);width:min(610px,calc(100vw - 36px));border:1px solid #39454B;border-radius:10px;background:#12181DF7;box-shadow:0 13px 36px #0005;padding:17px 19px}
+.nav-playback-row{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:12px;font-weight:600;margin-bottom:14px}
+.nav-playback-note{color:#8C98A4;font-size:10px;font-weight:450}
+#navScrub{--route-progress:0%;display:block;width:100%;margin:0 0 17px;appearance:none;-webkit-appearance:none;height:4px;border:0;border-radius:4px;background:linear-gradient(90deg,#D7F36A var(--route-progress),#3B474E var(--route-progress));cursor:pointer}
+#navScrub::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:#D7F36A;border:3px solid #12181D;box-shadow:0 0 0 1px #D7F36A}
+#navScrub::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:#D7F36A;border:2px solid #12181D}
+.nav-control-buttons{display:flex;align-items:center;gap:12px;justify-content:space-between}
+.nav-control-buttons button{border-radius:6px;min-height:39px;font-weight:650;font-size:12px;padding:0 15px}
+.nav-play-button{background:#D7F36A;color:#0B0F12;border:1px solid #D7F36A;min-width:80px}
+.nav-exit-button{background:#232D32;color:#D8E0E7;border:1px solid #47535B}
+.nav-camera-label{margin:0;display:flex;align-items:center;justify-content:center;gap:7px;color:#BCC5CE;font-size:11px;font-weight:500;letter-spacing:0;cursor:pointer}
+.nav-camera-label input{accent-color:#D7F36A}
+.nav-camera-label small{color:#8C98A4;font-size:10px}
+.walkthrough-marker{position:relative;width:22px;height:22px;display:grid;place-items:center;filter:drop-shadow(0 2px 4px #0008)}
+.walkthrough-marker::before{content:"";display:block;width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:19px solid #D7F36A}
+.walkthrough-mode .map-controls{bottom:165px}
+@media(max-width:740px){
+ .topbar{height:58px}
+ .panel{top:auto;bottom:calc(8px + env(safe-area-inset-bottom));max-height:57dvh;width:auto}
+ .walkthrough-mode .panel{transform:translateY(28px)}
+ .nav-hud{top:69px;left:10px;width:calc(100vw - 20px);max-width:none;padding:17px 18px}
+ .nav-next-distance{font-size:37px;margin:11px 0 6px}
+ .nav-instruction{font-size:18px;min-height:48px}
+ .nav-hud-footer{margin-top:10px;padding-top:12px}
+ .nav-controls{bottom:calc(9px + env(safe-area-inset-bottom));padding:15px}
+ .nav-playback-row{margin-bottom:13px}
+ .nav-control-buttons{gap:7px;flex-wrap:wrap}
+ .nav-camera-label small{display:none}
+ .nav-control-buttons button{padding:0 10px}
+ .walkthrough-mode .map-controls{bottom:180px;right:10px}
+}
+@media(prefers-reduced-motion:reduce){.panel{transition:none}}
