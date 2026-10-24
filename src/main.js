@@ -19,7 +19,7 @@ const REQUEST_GAP = 12000;
 const SEARCH_GAP = 8000;
 const RECENT_LIMIT = 5;
 const isReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-const MOTION = isReducedMotion ? 0 : 520;
+const MOTION = isReducedMotion ? 0 : 810;
 const state = {
   map: null, mapReady: false, mode: 'idle',
   key: '', query: '', destinationName: '', destination: null,
@@ -98,6 +98,7 @@ function showSettings() {
   $('apiKey').focus();
 }
 function setMode(mode) {
+  if (mode !== 'preview') closeRoutesTray();
   state.mode = mode;
   document.body.dataset.mode = mode;
   $('idlePrompt').hidden = mode !== 'idle';
@@ -214,7 +215,9 @@ function fitRoute() {
   }
   if (bounds.isEmpty()) return;
   const mobile = window.innerWidth <= 760;
-  const bottom = mobile ? Math.min(350, Math.round(innerHeight * .44)) : 320;
+  // Leave breathing room for the floating journey pod, not an imagined
+  // full-height website sidebar. The tray only appears when requested.
+  const bottom = mobile ? Math.min(300, Math.round(innerHeight * .37)) : 245;
   state.map.fitBounds(bounds, {
     padding: { top: 82, bottom, left: mobile ? 28 : 85, right: mobile ? 28 : 85 },
     maxZoom: 15, duration: MOTION
@@ -531,9 +534,10 @@ function renderPreview() {
   $('summaryDelay').textContent=delay>40?minutes(delay)+' delay':'Traffic-aware';
   const target=$('routeChoices');
   target.replaceChildren();
-  $('routeAlternativeCount').textContent =
-    state.routes.features.length > 1 ? String(state.routes.features.length - 1) : '';
-  $('alternativesDetails').hidden = state.routes.features.length <= 1;
+  const alternatives = Math.max(0, state.routes.features.length - 1);
+  $('routeAlternativeCount').textContent = alternatives ? String(alternatives) : '';
+  $('routesToggle').hidden = alternatives === 0;
+  if (!alternatives) closeRoutesTray();
   state.routes.features.forEach((r,index)=>{
     const button=document.createElement('button');
     button.type='button';
@@ -544,7 +548,11 @@ function renderPreview() {
     duration.textContent=minutes(r.properties?.summary?.travelTimeInSeconds);
     button.append(label,duration);
     button.addEventListener('click',()=>{
-      state.selected=index;renderPreview();requestDraw();overview();
+      state.selected=index;
+      renderPreview();
+      closeRoutesTray();
+      requestDraw();
+      overview();
     });
     target.append(button);
   });
@@ -619,7 +627,7 @@ function navCamera(p,immediate=false){
   const padding={top:Math.round(h*.40),bottom:Math.round(h*.12),left:0,right:0};
   state.map.easeTo({
     center:p.point,bearing:p.angle,pitch:59,zoom:15.65,
-    padding,duration:immediate?MOTION:670
+    padding,duration:immediate?MOTION:(isReducedMotion ? 0 : 890)
   });
 }
 function navHud(){
@@ -712,6 +720,19 @@ function stopNavigationDemo(){
 }
 
 
+// Other routes are context, not an always-visible stack of dashboard rows.
+function closeRoutesTray() {
+  const tray = $('routesTray');
+  const toggle = $('routesToggle');
+  if (tray) tray.hidden = true;
+  if (toggle) toggle.setAttribute('aria-expanded','false');
+}
+function toggleRoutesTray() {
+  if (state.mode !== 'preview' || $('routesToggle').hidden) return;
+  const expanded = $('routesToggle').getAttribute('aria-expanded') === 'true';
+  $('routesTray').hidden = expanded;
+  $('routesToggle').setAttribute('aria-expanded',String(!expanded));
+}
 function attachEvents() {
   $('idlePrompt').addEventListener('click',openSearch);
   $('searchBack').addEventListener('click',backToIdle);
@@ -746,8 +767,13 @@ function attachEvents() {
       pitch:0,bearing:0,padding:{top:0,bottom:0,left:0,right:0},duration:MOTION
     });
   });
-  $('recalculate').addEventListener('click',()=>planRoute(true));
-  $('fit').addEventListener('click',overview);
+  $('routesToggle').addEventListener('click',toggleRoutesTray);
+  $('routesClose').addEventListener('click',()=>{
+    closeRoutesTray();
+    $('routesToggle').focus();
+  });
+  $('recalculate').addEventListener('click',()=>{closeRoutesTray();planRoute(true);});
+  $('fit').addEventListener('click',()=>{closeRoutesTray();overview();});
   $('startPreview').addEventListener('click',startNavigationDemo);
   $('navPlay').addEventListener('click',toggleSim);
   $('navExit').addEventListener('click',stopNavigationDemo);
@@ -782,6 +808,7 @@ function attachEvents() {
   document.addEventListener('keydown',event=>{
     if(event.key!=='Escape')return;
     if(!$('settingsPanel').hidden) $('settingsPanel').hidden=true;
+    else if(!$('routesTray').hidden) closeRoutesTray();
     else if(state.mode==='search') backToIdle();
   });
 }

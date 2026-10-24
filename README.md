@@ -155,3 +155,13 @@ Glide's UI now uses four separate modes: **Idle**, **Search**, **Preview**, and 
 Typing, local recent-place filtering, map movement and route playback do not issue TomTom Routing or Search requests. Destination search is explicitly submitted, uses a 30-minute in-memory cache and an 8-second repeat-request guard. A route is requested only when a returned/previous destination is selected, or through manual traffic refresh, with the prior 2-minute route cache and 12-second routing throttle. Search and route counters are retained for the browser tab. The base map continues using OpenFreeMap, not TomTom Map Display.
 
 The repository includes `scripts/check-ui.mjs` structural tests, and the GitHub Pages workflow runs these checks before building. They cannot replace interactive testing with a user-owned TomTom key.
+
+## Glide Interface v3.1 — Journey Pod
+
+The route-preview screen has deliberately abandoned stacked information-card rows. It now consists of two separate map instruments: a rounded **journey pod** with destination, ETA, distance and a single **Start** action, plus an independent capsule **control dock** containing Routes, Traffic, and Overview. The optional route-choice tray rises above the pod; routes no longer fill a permanent subsection in the main surface.
+
+- `Start` launches the existing **simulated** 3D route walkthrough; it is *not* a claim of road-ready GPS navigation. An accessibility label makes this explicit.
+- The map's other controls now use circular and capsule geometry. Main pod radius is 34 px, secondary instruments 28 px, and buttons use full pill radii.
+- Motion uses weighted, non-spring easing with 530–650 ms UI entrance and approximately 810–890 ms map camera movements, honoring reduced-motion preferences. Safety-relevant text updates remain immediate.
+- TomTom usage is unchanged. The Routes tray only changes local UI state, and Traffic remains a manually initiated refresh. Route caching and throttling are retained.
+- User-designed wordmark, Satin Obsidian color system and OpenFreeMap cartography are unchanged.

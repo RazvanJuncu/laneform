@@ -249,3 +249,195 @@ body[data-mode="preview"] .safety-footnote,body[data-mode="navigation"] .safety-
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{
   animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important
 }}
+
+/* GLIDE v3.1 — machined softness; a journey pod and separate circular dock.
+   No divided dashboard rows, no layered boxes inside boxes. */
+:root{
+  --easing:cubic-bezier(.19,1,.22,1);
+  --weight-ease:cubic-bezier(.22,.61,.36,1);
+  --pod-radius:34px;
+  --instrument-radius:28px;
+  --control-radius:999px;
+}
+.sr-only{position:absolute!important;width:1px!important;height:1px!important;
+  padding:0!important;margin:-1px!important;overflow:hidden!important;
+  clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+.preview-sheet{
+  position:fixed;z-index:5;
+  left:50%;bottom:24px;transform:translateX(-50%);
+  width:min(490px,calc(100vw - 36px));
+  padding:0;border:0;background:transparent;box-shadow:none;
+  display:flex;flex-direction:column;align-items:center;gap:12px;
+  animation:none;
+}
+.journey-pod{
+  width:100%;padding:23px 27px 24px;
+  background:rgba(13,17,20,.97);
+  border:1px solid rgba(199,205,210,.11);
+  border-radius:var(--pod-radius);
+  box-shadow:0 19px 45px rgba(0,0,0,.15);
+  animation:glide-pod-enter 590ms var(--weight-ease) both;
+}
+.journey-destination{
+  display:flex;justify-content:space-between;align-items:start;gap:15px;
+}
+.journey-destination .destination-info{min-width:0;gap:6px}
+.journey-destination .destination-info>span{
+  font-size:11px;font-weight:450;letter-spacing:0;color:#929DA5;
+}
+.journey-destination .destination-info>strong{
+  display:block;max-width:360px;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;font-size:15px;letter-spacing:-.02em;font-weight:550;color:#E3E7EA;
+}
+.journey-edit{
+  border:0;background:transparent;color:#9AA6AE;
+  min-width:58px;min-height:44px;flex:none;
+  border-radius:999px;padding:0 12px;margin:-9px -9px 0 0;
+  font-size:11px;letter-spacing:0;
+  transition:background 220ms var(--weight-ease),color 220ms var(--weight-ease);
+}
+.journey-edit:hover{background:rgba(199,205,210,.07);color:#E7EAED}
+.journey-body{
+  display:flex;align-items:end;justify-content:space-between;
+  gap:18px;margin-top:19px;
+}
+.journey-numbers{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px 12px;min-width:0}
+.journey-numbers>strong{
+  font-size:39px;line-height:1.1;font-weight:550;letter-spacing:-.055em;
+  font-variant-numeric:tabular-nums;white-space:nowrap;color:#E7EAED;
+}
+.journey-numbers>span:not(.sr-only){font-size:12px;color:#9CA9B1;white-space:nowrap}
+.journey-body .start-button{
+  min-width:116px;height:51px;min-height:51px;padding:0 19px 0 22px;
+  border-radius:var(--control-radius);font-size:13px;font-weight:650;
+  gap:14px;white-space:nowrap;
+  transition:background 230ms var(--weight-ease),box-shadow 230ms var(--weight-ease);
+}
+.journey-body .start-button:hover{background:#F4F5F6;box-shadow:0 2px 14px #E7EAED13}
+.journey-body .start-button span{font-size:16px;font-weight:400}
+.journey-dock{
+  display:flex;align-items:center;justify-content:center;gap:4px;
+  width:max-content;max-width:100%;min-height:48px;padding:5px;
+  border-radius:var(--control-radius);
+  border:1px solid rgba(199,205,210,.11);
+  background:rgba(13,17,20,.96);
+  box-shadow:0 12px 28px rgba(0,0,0,.12);
+  animation:glide-dock-enter 650ms var(--weight-ease) both;
+}
+.dock-control{
+  border:0;border-radius:var(--control-radius);background:transparent;
+  min-height:38px;padding:0 16px;color:#A1ADB5;
+  font-size:11px;font-weight:500;letter-spacing:0;white-space:nowrap;
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  transition:background 240ms var(--weight-ease),color 240ms var(--weight-ease);
+}
+.dock-control:hover,.dock-control[aria-expanded="true"]{
+  background:#242B30;color:#E7EAED;
+}
+.dock-count{
+  min-width:17px;height:17px;display:inline-flex;align-items:center;justify-content:center;
+  border-radius:100%;background:#273037;color:#BDC7CE;font-size:10px;font-variant-numeric:tabular-nums;
+}
+.dock-count:empty{display:none}
+.routes-tray{
+  width:100%;max-width:455px;
+  padding:16px 19px 19px;
+  border:1px solid rgba(199,205,210,.14);
+  border-radius:var(--instrument-radius);background:rgba(13,17,20,.97);
+  box-shadow:0 18px 42px rgba(0,0,0,.15);
+  animation:glide-tray-enter 530ms var(--weight-ease) both;
+}
+.routes-tray-heading{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:10px;color:#B4BEC4;font-size:12px;font-weight:550;
+}
+.tray-close{
+  display:grid;place-items:center;border:0;
+  background:#242B30;color:#C5CDD2;border-radius:50%;
+  width:32px;height:32px;font-size:19px;
+}
+.tray-close:hover{background:#333B40}
+.routes-tray .route-options{display:flex;flex-direction:column;gap:7px;padding:0}
+.routes-tray .route-option{
+  width:100%;min-height:46px;flex:none;border-radius:16px;
+  padding:0 16px;font-size:12px;
+  background:#171D21;border-color:rgba(199,205,210,.08);
+  transition:background 220ms var(--weight-ease),border-color 220ms var(--weight-ease);
+}
+.routes-tray .route-option:hover{background:#222A30}
+.routes-tray .route-option.selected{background:#252E34;border-color:#8A959D}
+.routes-tray .route-option strong{font-size:13px}
+
+.idle-prompt{border-radius:999px;min-height:67px;padding:0 26px;
+  transition:background 230ms var(--weight-ease),border-color 230ms var(--weight-ease)}
+.search-sheet{border-radius:30px;padding-bottom:22px;
+  animation:glide-sheet-enter 580ms var(--weight-ease) both}
+.search-input-wrap{border-radius:0}
+.origin-options button{border-radius:999px}
+.sheet:not(.preview-sheet){border-radius:var(--instrument-radius)}
+.nav-hud{border-radius:var(--instrument-radius);animation:glide-hud-enter 540ms var(--weight-ease) both}
+.nav-bar{border-radius:var(--instrument-radius);animation:glide-sheet-enter 560ms var(--weight-ease) both}
+.settings-panel{border-radius:26px;animation:glide-hud-enter 530ms var(--weight-ease) both}
+.map-fab{border-radius:50%;width:52px;height:52px}
+.icon-control{border-radius:50%;width:45px;height:45px}
+.nav-actions .start-button,.nav-actions .minimal-control{border-radius:999px}
+.nav-actions .minimal-control{padding:0 17px}
+.toast{border-radius:22px}
+@keyframes glide-pod-enter{
+  from{opacity:0;transform:translateY(28px)}
+  to{opacity:1;transform:translateY(0)}
+}
+@keyframes glide-dock-enter{
+  from{opacity:0;transform:translateY(17px)}
+  to{opacity:1;transform:translateY(0)}
+}
+@keyframes glide-tray-enter{
+  from{opacity:0;transform:translateY(16px)}
+  to{opacity:1;transform:translateY(0)}
+}
+@keyframes glide-sheet-enter{
+  from{opacity:0;transform:translate(-50%,25px)}
+  to{opacity:1;transform:translate(-50%,0)}
+}
+@keyframes glide-hud-enter{
+  from{opacity:0;transform:translateY(-15px)}
+  to{opacity:1;transform:translateY(0)}
+}
+body[data-mode="preview"] .map-fab{bottom:255px}
+@media(max-width:760px){
+  .preview-sheet{
+    bottom:calc(12px + env(safe-area-inset-bottom));
+    left:10px;right:10px;width:auto;max-width:none;
+    transform:none;padding:0;animation:none;
+    gap:10px;
+  }
+  .journey-pod{padding:20px 22px 22px;border-radius:30px}
+  .journey-body{gap:12px;margin-top:15px}
+  .journey-numbers>strong{font-size:35px}
+  .journey-body .start-button{min-width:105px;min-height:49px;height:49px;padding:0 16px}
+  .journey-dock{min-height:48px;width:min(100%,345px)}
+  .dock-control{padding:0 11px;flex:1;font-size:11px}
+  .routes-tray{max-width:none}
+  .search-sheet{
+    border-radius:30px 30px 0 0;
+    animation:glide-sheet-mobile-enter 580ms var(--weight-ease) both
+  }
+  .nav-bar{animation:glide-sheet-mobile-enter 570ms var(--weight-ease) both}
+  .map-fab{width:49px;height:49px}
+  body[data-mode="preview"] .map-fab{bottom:calc(236px + env(safe-area-inset-bottom))}
+}
+@media(max-width:380px){
+  .journey-pod{padding:18px 19px 20px}
+  .journey-numbers>strong{font-size:31px}
+  .journey-body .start-button{min-width:96px}
+  .dock-control{padding:0 8px}
+}
+@keyframes glide-sheet-mobile-enter{
+  from{opacity:0;transform:translateY(25px)}
+  to{opacity:1;transform:translateY(0)}
+}
+@media(prefers-reduced-motion:reduce){
+  .journey-pod,.journey-dock,.routes-tray,.nav-hud,.nav-bar,.search-sheet,.settings-panel{
+    animation:none!important
+  }
+}

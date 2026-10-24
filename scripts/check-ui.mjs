@@ -34,4 +34,17 @@ assert.ok(js.includes("async function planRoute(force = false, chosenPlace = nul
 assert.ok(css.includes('.idle-prompt') && css.includes('.search-sheet'), 'New styles missing');
 assert.equal(style.version,8,'MapLibre style specification version');
 assert.ok(style.sources?.openmaptiles,'The OSM-backed vector source must be present');
+for (const id of ['routesTray','routesToggle','routesClose','routeAlternativeCount','startPreview'])
+  assert.ok(existing.has(id), 'Missing v3.1 journey pod control: ' + id);
+assert.ok(/id="startPreview"[^>]*>Start\s*</.test(html),
+  'The primary navigation control must say Start');
+assert.ok(!html.includes('id="alternativesDetails"'),
+  'Alternatives should not appear as a stacked details row');
+assert.ok(js.includes('function closeRoutesTray()') && js.includes('function toggleRoutesTray()'),
+  'The separate routes tray must have open/close behavior');
+assert.ok(js.includes('isReducedMotion ? 0 : 810'),
+  'Camera motion token should be slow and reduced-motion aware');
+assert.ok(css.includes('--pod-radius:34px') && css.includes('--control-radius:999px'),
+  'New rounded geometry design tokens are required');
+console.log('Glide v3.1 pod, pill dock and weighted-motion checks passed.');
 console.log('Glide Interface v3 structural checks passed ('+ids.length+' components).');

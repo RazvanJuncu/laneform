@@ -66,29 +66,39 @@
     <p class="search-helper">A search runs only when you press Search or Enter.</p>
   </section>
 
-  <section id="previewSheet" class="preview-sheet sheet" hidden aria-label="Selected route">
-    <div class="preview-head">
-      <div class="destination-info">
-        <span>Going to</span>
-        <strong id="previewDestination">Destination</strong>
+  <section id="previewSheet" class="preview-sheet" hidden aria-label="Selected journey">
+    <div id="routesTray" class="routes-tray" hidden aria-label="Available routes">
+      <div class="routes-tray-heading">
+        <span>Choose a route</span>
+        <button type="button" id="routesClose" class="tray-close" aria-label="Close route choices">×</button>
       </div>
-      <button id="backToPlanning" type="button" class="text-control">Change</button>
+      <div id="routeChoices" class="route-options" role="group" aria-label="Choose a route"></div>
     </div>
-    <div class="preview-main">
-      <div class="journey-numbers">
-        <strong id="summaryTime">—</strong>
-        <span id="summaryLength">— km</span>
-        <small id="summaryDelay">Live traffic included</small>
+
+    <div class="journey-pod">
+      <div class="journey-destination">
+        <div class="destination-info">
+          <span>Going to</span>
+          <strong id="previewDestination">Destination</strong>
+        </div>
+        <button id="backToPlanning" type="button" class="journey-edit" aria-label="Change destination">Change</button>
       </div>
-      <button id="startPreview" type="button" class="start-button">Preview <span aria-hidden="true">↗</span></button>
+      <div class="journey-body">
+        <div class="journey-numbers">
+          <strong id="summaryTime">—</strong>
+          <span id="summaryLength">— km</span>
+          <span id="summaryDelay" class="sr-only" aria-live="polite">Traffic considered</span>
+        </div>
+        <button id="startPreview" type="button" class="start-button" title="Start route simulation" aria-label="Start simulated navigation">Start <span aria-hidden="true">↗</span></button>
+      </div>
     </div>
-    <details id="alternativesDetails" class="alternatives-disclosure">
-      <summary>Alternative routes <span id="routeAlternativeCount"></span></summary>
-      <div id="routeChoices" class="route-options" aria-label="Route options"></div>
-    </details>
-    <div class="preview-links">
-      <button id="recalculate" type="button" class="text-control">Update traffic</button>
-      <button id="fit" type="button" class="text-control">Full route</button>
+
+    <div class="journey-dock" role="group" aria-label="Journey controls">
+      <button id="routesToggle" type="button" class="dock-control" aria-expanded="false" aria-controls="routesTray">
+        <span>Routes</span><span id="routeAlternativeCount" class="dock-count"></span>
+      </button>
+      <button id="recalculate" type="button" class="dock-control" title="Refresh current traffic information">Traffic</button>
+      <button id="fit" type="button" class="dock-control" title="Show entire route">Overview</button>
     </div>
   </section>
 
