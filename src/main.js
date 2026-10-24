@@ -12,7 +12,7 @@ const ROUTE_TTL_MS = 2 * 60 * 1000;
 const ROUTE_MIN_GAP_MS = 12 * 1000;
 const TRAFFIC_REFRESH_MS = 5 * 60 * 1000;
 const SEARCH_TTL_MS = 30 * 60 * 1000;
-const TRAFFIC_MIN_ZOOM = 12;
+const TRAFFIC_MIN_ZOOM = 11;
 const state = {
   map: null, ready: false, routes: null, destination: null, gps: null,
   marker: null, waypointMarkers: [], originMode: 'demo', busy: false,
@@ -87,9 +87,11 @@ function setTrafficOverlay(enabled) {
     return;
   }
   if (map.getLayer('laneform-traffic-layer')) {
-    map.setLayoutProperty('laneform-traffic-layer', 'visibility', permitted ? 'visible' : 'none');
+    const target = permitted ? 'visible' : 'none';
+    if (map.getLayoutProperty('laneform-traffic-layer', 'visibility') === target) return;
+    map.setLayoutProperty('laneform-traffic-layer', 'visibility', target);
+    drawRouteLines();
   }
-  drawRouteLines();
 }
 function refreshTrafficTilesOnDemand() {
   const map = state.map;
@@ -130,7 +132,7 @@ async function connect() {
       refreshExpiredTiles: false
     });
     state.map = map;
-    map.on('zoomend', () => setTrafficOverlay(el('trafficToggle').checked));
+    map.on('moveend', () => setTrafficOverlay(el('trafficToggle').checked));
     await new Promise((resolve, reject) => {
       if (map.loaded()) { resolve(); return; }
       const timer = setTimeout(() => reject(new Error('Map timed out while loading tiles.')), 25000);
