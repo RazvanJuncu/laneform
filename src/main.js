@@ -3,6 +3,7 @@ import { calculateRoute, discoverPlaces } from '@tomtom-org/maps-sdk/services';
 import { Map as MapLibreMap, Marker, LngLatBounds, setWorkerUrl } from 'maplibre-gl';
 import mapLibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import glideMapStyle from './glide-map-style.json';
 import './style.css';
 
 // MapLibre 6 cannot locate its vector worker inside a Vite bundle by default.
@@ -65,33 +66,10 @@ function origin() { return state.originMode === 'gps' ? state.gps : DEMO_ORIGIN;
 
 // TomTom documented raster endpoint, rendered using independent MapLibre rather
 // than the TomTom SDK's public-preview map/style wrapper.
-function baseTileURL(key) {
-  return 'https://api.tomtom.com/maps/orbis/display/raster/tile/{z}/{x}/{y}' +
-    '?apiVersion=2&style=street-dark&tileSize=256&key=' + encodeURIComponent(key);
-}
-// Direct, reliable grayscale rendering of the previously working TomTom
-// street-dark raster tiles. No external vector style/sprite/glyph requests.
-function glideMonoStyle(key) {
-  return {
-    version: 8,
-    sources: {
-      'glide-mono-raster': {
-        type: 'raster', tiles: [baseTileURL(key)], tileSize: 256,
-        minzoom: 0, maxzoom: 18, attribution: '© TomTom'
-      }
-    },
-    layers: [
-      { id: 'glide-background', type: 'background',
-        paint: { 'background-color': '#0B0F12' } },
-      { id: 'glide-mono-raster', type: 'raster', source: 'glide-mono-raster',
-        paint: {
-          'raster-saturation': -1, 'raster-contrast': 0.16,
-          'raster-brightness-min': 0.03, 'raster-brightness-max': 0.70,
-          'raster-opacity': 0.95
-        }
-      }
-    ]
-  };
+// OpenFreeMap vector base map is key-free. Only routing/search/traffic use
+// TomTom. Its focused style ships with the app, so there is no style fetch.
+function openMapStyle() {
+  return structuredClone(glideMapStyle);
 }
 function trafficTileURL(key) {
   return 'https://api.tomtom.com/traffic/map/4/tile/flow/relative-delay/{z}/{x}/{y}.pbf' +
@@ -148,96 +126,58 @@ function refreshTrafficTilesOnDemand() {
     state.lastTrafficAt = Date.now();
   }
 }
-async function connect() {
+function connect() {
+  // Purely local configuration: no TomTom network requests on connect.
   const key = el('apiKey').value.trim();
-  if (!key) { status('Enter your TomTom API key.', true); return; }
-  el('connect').disabled = true;
-  status('Preparing map…');
-  state.ready = false;
-  try {
-    TomTomConfig.instance.put({ apiKey: key, language: 'en-GB' });
-    // Skip the old world-tile probe: it added a paid tile request that
-    // MapLibre would never use for a Bucharest viewport.
-    if (state.walkthrough.active) exitWalkthrough();
-    if (state.watchId !== null) stopGPSFollow();
-    if (state.map) state.map.remove();
-    if (state.routeCanvas) state.routeCanvas.remove();
-    state.routeCanvas = null;
-    const style = glideMonoStyle(key);
-    const map = new MapLibreMap({
-      container: 'map', style, center: BUCHAREST, zoom: 12,
-      attributionControl: true, maxZoom: 20,
-      refreshExpiredTiles: false
-    });
-    state.map = map;
-    state.lastNativeRouteId = null;
-    prepareRouteCanvas();
-    map.on('move', scheduleRouteDraw);
-    map.on('resize', scheduleRouteDraw);
-    map.on('moveend', () => {
-      setTrafficOverlay(el('trafficToggle').checked);
-      scheduleRouteDraw();
-    });
-    // 'load' waits for *all* necessary tiles. On slow/mobile networks it may
-    // never fire, despite the style already being operational. Unlock the
-    // planner at 'style.load'; map tiles arrive progressively thereafter.
-    await new Promise((resolve, reject) => {
-      if (map.getSource('glide-mono-raster')) return resolve();
-      let done = false;
-      const finish = (error) => {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        map.off('style.load', onStyle);
-        map.off('remove', onRemove);
-        if (error) reject(error); else resolve();
-      };
-      const onStyle = () => finish();
-      const onRemove = () => finish(new Error('Map was closed before startup'));
-      const timer = setTimeout(
-        () => finish(new Error('Map renderer did not initialize. Check browser WebGL support.')),
-        4500
-      );
-      map.on('style.load', onStyle);
-      map.on('remove', onRemove);
-    });
-    // A failed remote tile should not block routing or the entire UI.
-    // Surface a clear, non-blocking message instead of waiting 25 seconds.
-    let lastTileErrorAt = 0;
-    map.on('error', (event) => {
-      const message = event?.error?.message || 'unknown tile error';
-      console.warn('Glide map request issue:', event?.error || event);
-      if (Date.now() - lastTileErrorAt < 6000) return;
-      lastTileErrorAt = Date.now();
-      status('Some map tiles could not load. Check TomTom Map Display permission and the browser console.', true);
-    });
-    state.ready = true;
-    scheduleRouteDraw();
-    try { sessionStorage.setItem('laneform.tomtom.key', key); } catch { /* storage disabled */ }
-    el('setup').hidden = true;
-    el('planner').hidden = false;
-    el('connection').textContent = 'CONNECTED';
-    el('connection').classList.add('connected');
-    status('Map ready. Choose a destination.');
-    try {
-      setTrafficOverlay(el('trafficToggle').checked);
-    } catch (error) {
-      console.warn('Optional traffic overlay could not start:', error);
-      status('Map ready; traffic overlay unavailable. Routes still support traffic.');
-    }
-  } catch (err) {
-    console.error('Map connection failed:', err);
-    state.ready = false;
-    status('Map connection failed: ' + (err?.message || 'unknown error'), true);
-    try { state.map?.remove(); } catch { /* no cleanup necessary */ }
-    state.map = null;
-    state.routeCanvas?.remove();
-    state.routeCanvas = null;
-  } finally {
-    el('connect').disabled = false;
+  if (!key) {
+    status('Enter your TomTom API key to calculate routes.', true);
+    return;
   }
+  TomTomConfig.instance.put({ apiKey: key, language: 'en-GB' });
+  try { sessionStorage.setItem('laneform.tomtom.key', key); }
+  catch { /* browser storage disabled */ }
+  el('setup').hidden = true;
+  el('connection').textContent = 'READY';
+  el('connection').classList.add('connected');
+  status('Ready. Choose a destination.');
 }
-
+function initializeMap() {
+  // The free OSM-based map starts independently of TomTom credentials and
+  // makes zero TomTom requests until the user asks for a route.
+  const map = new MapLibreMap({
+    container: 'map',
+    style: openMapStyle(),
+    center: BUCHAREST, zoom: 12,
+    maxZoom: 20,
+    attributionControl: true,
+    refreshExpiredTiles: false
+  });
+  state.map = map;
+  prepareRouteCanvas();
+  map.on('move', scheduleRouteDraw);
+  map.on('resize', scheduleRouteDraw);
+  map.on('moveend', () => {
+    if (state.ready) setTrafficOverlay(el('trafficToggle').checked);
+    scheduleRouteDraw();
+  });
+  map.on('style.load', () => {
+    state.ready = true;
+    el('planner').hidden = false;
+    if (!el('apiKey').value.trim()) {
+      el('connection').textContent = 'MAP READY';
+      status('Map is ready. Add a routing key to calculate a journey.');
+    } else {
+      el('connection').textContent = 'READY';
+      el('connection').classList.add('connected');
+      status('Ready. Choose a destination.');
+    }
+    scheduleRouteDraw();
+  });
+  map.on('error', event => {
+    // Tile failures should never freeze routing UI.
+    console.warn('Glide base map issue:', event.error || event);
+  });
+}
 function showGPS(position) {
   const point = [position.coords.longitude, position.coords.latitude];
   state.gps = point;
@@ -465,6 +405,14 @@ async function renderRoutes() {
 }
 async function planRoute(refresh = false) {
   if (state.busy || !state.ready) return;
+  const key = el('apiKey').value.trim();
+  if (!key) {
+    el('setup').hidden = false;
+    el('apiKey').focus();
+    status('Add your TomTom key to calculate a route.', true);
+    return;
+  }
+  TomTomConfig.instance.put({ apiKey: key, language: 'en-GB' });
   const start = origin();
   if (!start) { status('Wait for GPS, or choose the Răzoare demo starting point.', true); return; }
   const query = el('destination').value.trim();
@@ -747,15 +695,16 @@ el('trafficToggle').addEventListener('change', (event) => {
   try { setTrafficOverlay(event.target.checked); }
   catch (err) { status('Traffic map layer unavailable: ' + err.message, true); }
 });
-// Do not auto-connect on refresh. Starting map tiles without an explicit
-// user action unnecessarily spends the personal free-tier allowance.
+// Restore credentials in-memory only. No request is sent to TomTom here.
 try {
-  const saved = sessionStorage.getItem('laneform.tomtom.key');
-  if (saved) {
-    el('apiKey').value = saved;
-    status('Saved key restored. Press Connect when you want to load map tiles.');
+  const savedKey = sessionStorage.getItem('laneform.tomtom.key');
+  if (savedKey) {
+    el('apiKey').value = savedKey;
+    el('setup').hidden = true;
+    TomTomConfig.instance.put({ apiKey: savedKey, language: 'en-GB' });
   }
 } catch { /* session storage disabled */ }
+initializeMap();
 try {
   const savedCounts = JSON.parse(sessionStorage.getItem('laneform.apiCounts') || 'null');
   for (const name of ['route', 'search']) {

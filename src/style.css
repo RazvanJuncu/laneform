@@ -262,3 +262,27 @@ button.secondary.active { border-color: var(--signal); color: var(--signal); }
  .walkthrough-mode .map-controls{bottom:180px;right:10px}
 }
 @media(prefers-reduced-motion:reduce){.panel{transition:none}}
+
+/* GLIDE / 0.5: the map, not the panel, should be the primary visual. */
+.topbar{height:62px;background:#0B0F12f2;border-bottom:1px solid #303A4033;padding:0 25px}
+.brand-wordmark{font-size:27px}
+.panel{top:82px;left:18px;width:346px;max-height:calc(100dvh - 100px);padding:24px 22px 15px;background:#12181DF2;border-color:#44515A55;border-radius:9px;box-shadow:0 16px 38px #0003}
+.heading{margin:0 0 19px}
+.heading h1{font-size:23px;font-weight:600;letter-spacing:-.045em;line-height:1.2;margin:0}
+#map{background:#0B0F12}
+.map-veil{display:none}
+label{letter-spacing:.04em}
+.field{margin-bottom:16px}
+.traffic-toggle{margin:8px 0 0}
+.section-divider{margin:15px 0 17px}
+.section-heading{margin-bottom:10px}
+.message{font-size:11px;margin-top:12px}
+.diagnostics{margin-top:12px}
+.footer{margin-top:2px}
+.maplibregl-ctrl-attrib{background:#0B0F12e8!important}
+@media(max-width:740px){
+  .topbar{height:56px;padding:0 14px}
+  .panel{top:auto;left:9px;right:9px;width:auto;bottom:calc(8px + env(safe-area-inset-bottom));max-height:56dvh;padding:20px 19px 13px}
+  .heading h1{font-size:22px}
+  .nav-hud{top:67px}
+}

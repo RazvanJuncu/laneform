@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Glide">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="description" content="Glide — a calmer way to navigate. Traffic-aware route planning, thoughtfully simplified.">
+  <meta name="description" content="Glide — calm maps and traffic-aware routing.">
   <title>Glide — Navigation</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,31 +16,23 @@
 <body>
 <div id="app">
   <div id="map" aria-label="Glide route planning map"></div>
-  <div class="map-veil" aria-hidden="true"></div>
   <header class="topbar">
     <div class="brand">
       <span class="brand-wordmark">glide<span class="brand-stop">.</span></span>
-      <span class="brand-divider"></span>
-      
-    </div>
+          </div>
     <div class="header-right">
-      <span id="connection" class="connection">DISCONNECTED</span>
-      
+      <span id="connection" class="connection">LOADING MAP</span>
     </div>
   </header>
   <main class="panel" id="plannerPanel">
-    <div class="heading">
-      <p class="eyebrow">YOUR JOURNEY</p>
-      <h1>Where to?</h1>
-      <p class="sub">Less noise. More clarity.</p>
-    </div>
+    <div class="heading"><h1>Plan a route</h1></div>
     <section id="setup" class="setup">
-      <label for="apiKey">Connect your map</label>
+      <label for="apiKey">TomTom routing key</label>
       <div class="key-entry">
         <input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="TomTom API key" aria-label="TomTom API key">
-        <button type="button" id="connect" class="secondary">Connect</button>
+        <button type="button" id="connect" class="secondary">Use key</button>
       </div>
-      <p class="helper">Your key stays in this browser tab. Connection is manual to avoid unnecessary map requests.</p>
+      <p class="helper">Used only for route calculations. No TomTom calls until you plan a journey.</p>
     </section>
     <section id="planner" hidden>
       <div class="field">
@@ -54,7 +46,7 @@
           <button type="button" id="gpsOrigin">My location</button>
         </div>
       </div>
-      <button type="button" id="plan" class="primary">Plan journey <span aria-hidden="true">↗</span></button>
+      <button type="button" id="plan" class="primary">Find route <span aria-hidden="true">↗</span></button>
       <label class="traffic-toggle">
         <input id="trafficToggle" type="checkbox" checked>
         <span>Significant delays only</span>
@@ -91,7 +83,7 @@
       <p id="usage" class="usage">This tab: 0 searches · 0 route calls · map tiles not counted</p>
       <p class="helper">Navigation and lane guidance are not validated. Follow road signs and markings.</p>
     </details>
-    <p class="footer"><span class="status-dot"></span>Route preview · Not validated for driving</p>
+    <p class="footer"><span class="status-dot"></span>Preview · Not for driving</p>
   </main>
   <div class="map-controls">
     <button id="locate" type="button" aria-label="Center on location" title="Locate">◎</button>

@@ -4,7 +4,7 @@ Glide is the visual brand. The GitHub repository and developer identifiers remai
 
 ## Features
 
-- TomTom interactive dark map, centered on Bucharest
+- Custom low-noise Glide vector map based on OpenFreeMap / OpenStreetMap, centered on Bucharest; no map API key required
 - Destination lookup using TomTom Search
 - Traffic-aware automobile routes with up to two alternatives, estimated duration and distance
 - Significant traffic delays only, from TomTom vector `relative-delay` tiles: draw red below 35% and orange below 60% of free-flow speed; normal segments (including green) are never drawn
@@ -86,3 +86,13 @@ Production caveats: provider quotas/terms apply, and a standalone GitHub Pages s
 Once a route has been calculated, press **Explore route**. A simulated marker moves along its already-calculated geometry at an accelerated 12× speed. The HUD displays the next maneuver when route-offset guidance is available, remaining route distance, and estimated remaining travel time. Playback, pausing, and scrubbing use **no additional TomTom Routing or Search API calls**.
 
 Camera following is off by default because moving the map can load additional tiles. The walkthrough is not live GPS navigation, does not simulate actual traffic, and is **not validated for active driving**. Live GPS follow remains a separate stationary-preview tool. Real map-matched navigation and lane-level instructions are not implemented yet.
+
+## Glide v0.5 — distraction-free custom map
+
+Glide's neutral map is now a **locally bundled vector style** (`src/glide-map-style.json`) using free OpenFreeMap / OpenStreetMap data. Road classes, colors, visibility at zoom levels, buildings and labels are styled independently. Unlike tinting TomTom raster screenshots, ordinary background roads and place names are intentionally low contrast. No POI icons or sprite request.
+
+Source style inspiration: MIT-licensed `hyperknot/openfreemap-styles` dark style. Attribution remains visible on the map. OpenFreeMap hosts the map tiles and glyphs as a public community service; respect its policies and do not imply an SLA.
+
+**TomTom is only used** when users explicitly request Search, Routing, or optional traffic tiles. Initial map display, panning, zooming, and route playback do **not** consume TomTom Map Display quota. A key restored from sessionStorage is configured locally without any network call.
+
+If the public vector provider is unavailable, its road geometry may not render; the application should present a useful error rather than claim a complete map. Follow real road signs/markings and never rely on this prototype for driving.
