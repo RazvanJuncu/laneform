@@ -13,11 +13,11 @@
 <div id="app">
   <div id="map" aria-label="Bucharest route planning map"></div>
   <header class="topbar">
-    <div class="brand"><span class="logo">↗</span><span>LANEFORM</span><span class="version">LAB / 0.1</span></div>
+    <div class="brand"><span class="logo">↗</span><span>LANEFORM</span><span class="version">LAB / 0.2</span></div>
     <span id="connection" class="connection">NOT CONNECTED</span>
   </header>
   <main class="panel">
-    <div class="heading"><p class="eyebrow">BUCHAREST / NAVIGATION LAB</p><h1>Where to?</h1><p class="sub">Traffic-aware routes now. Lane guidance comes next.</p></div>
+    <div class="heading"><p class="eyebrow">BUCHAREST / NAVIGATION LAB</p><h1>Where to?</h1><p class="sub">Traffic-aware routes. Explore each upcoming maneuver.</p></div>
     <section id="setup">
       <label for="apiKey">TomTom API key</label>
       <div class="key-entry"><input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="Enter your private key"><button type="button" id="connect" class="secondary">Connect</button></div>
@@ -39,10 +39,16 @@
         <div id="routeChoices" class="choices"></div>
         <div id="routeSummary" class="summary"></div>
         <button type="button" id="refresh" class="secondary wide">Recalculate with current traffic</button>
+        <button type="button" id="followGPS" class="secondary wide">Follow GPS (preview)</button>
+        <p id="gpsAccuracy" class="gps-accuracy">GPS following works only while the webpage is active.</p>
+        <section class="guidance">
+          <div class="guidance-head"><p class="eyebrow">TURN-BY-TURN PREVIEW</p><span id="guidanceCount">—</span></div>
+          <div id="guidanceSteps" class="guidance-steps"></div>
+        </section>
       </section>
     </section>
     <p id="message" role="status" aria-live="polite" class="message">Enter your API key to load the map.</p>
-    <p class="footer"><span class="status-dot"></span> Prototype for stationary route planning — not for driving</p>
+    <p class="footer"><span class="status-dot"></span> Experimental route preview — not validated for driving</p>
   </main>
   <div class="map-controls"><button id="locate" type="button" aria-label="Center map on current location" title="Locate">◎</button><button id="fit" type="button" aria-label="Fit selected route on map" title="Show route">⤢</button></div>
 </div>

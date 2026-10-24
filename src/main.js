@@ -8,7 +8,7 @@ import './style.css';
 const DEMO_ORIGIN = [26.061, 44.429];
 const BUCHAREST = [26.1025, 44.4397];
 const el = (id) => document.getElementById(id);
-const state = { map: null, ready: false, routes: null, destination: null, gps: null, marker: null, waypointMarkers: [], originMode: 'demo', busy: false, selected: 0 };
+const state = { map: null, ready: false, routes: null, destination: null, gps: null, marker: null, waypointMarkers: [], originMode: 'demo', busy: false, selected: 0, watchId: null };
 
 function status(message, error = false) {
   el('message').textContent = message;
@@ -36,7 +36,7 @@ function trafficTileURL(key) {
 }
 function setTrafficOverlay(enabled) {
   const map = state.map;
-  if (!map || !state.ready || !map.isStyleLoaded()) return;
+  if (!map || !state.ready || !map.getStyle()) return;
   if (!map.getSource('laneform-traffic')) {
     if (!enabled) return;
     map.addSource('laneform-traffic', {
@@ -52,6 +52,7 @@ function setTrafficOverlay(enabled) {
   if (map.getLayer('laneform-traffic-layer')) {
     map.setLayoutProperty('laneform-traffic-layer', 'visibility', enabled ? 'visible' : 'none');
   }
+  drawRouteLines();
 }
 async function connect() {
   const key = el('apiKey').value.trim();
@@ -71,6 +72,7 @@ async function connect() {
       throw new Error('TomTom map tile returned HTTP ' + probe.status +
         '. Check Map Display API permission, domain whitelist and free-tier usage.');
     }
+    if (state.watchId !== null) stopGPSFollow();
     if (state.map) state.map.remove();
     const style = {
       version: 8,
@@ -167,29 +169,69 @@ function fitRoute() {
 }
 function drawRouteLines() {
   const map = state.map;
-  if (!map || !map.isStyleLoaded() || !state.routes?.features?.length) return;
+  if (!map || !state.ready || !map.getStyle() || !state.routes?.features?.length) return;
   const routes = state.routes.features;
+  const selected = routes[state.selected];
+  if (selected?.geometry?.type !== 'LineString' || selected.geometry.coordinates.length < 2) {
+    console.error('Unexpected route geometry', selected?.geometry);
+    status('Routing returned an unsupported path geometry.', true);
+    return;
+  }
   const sets = [
-    ['laneform-route-alternatives', routes.filter((_, i) => i !== state.selected), 'laneform-line-alternatives', '#95b1bf', 5],
-    ['laneform-route-selected', [routes[state.selected]], 'laneform-line-selected', '#d8f4a7', 7],
+    ['laneform-route-alternatives', routes.filter((_, i) => i !== state.selected), 'laneform-line-alternatives', '#c5d1d2', 5, 0.8],
+    ['laneform-route-selected', [selected], 'laneform-line-casing', '#122629', 13, 0.99],
+    ['laneform-route-selected', [selected], 'laneform-line-selected', '#d8f4a7', 7, 1],
   ];
-  for (const [sourceId, features, layerId, color, width] of sets) {
+  for (const [sourceId, features, layerId, color, width, opacity] of sets) {
     const data = { type: 'FeatureCollection', features };
     const source = map.getSource(sourceId);
     if (source) source.setData(data);
-    else {
-      map.addSource(sourceId, { type: 'geojson', data });
-      map.addLayer({ id: layerId, source: sourceId, type: 'line',
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: { 'line-color': color, 'line-width': width, 'line-opacity': 0.95 } });
-    }
+    else map.addSource(sourceId, { type: 'geojson', data });
+    if (!map.getLayer(layerId)) map.addLayer({
+      id: layerId, source: sourceId, type: 'line',
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: { 'line-color': color, 'line-width': width, 'line-opacity': opacity }
+    });
+    map.moveLayer(layerId);
   }
 }
-
+function instructionLabel(instruction) {
+  if (instruction?.message) return instruction.message;
+  const road = instruction?.nextRoadInfo?.streetName?.text;
+  const maneuver = (instruction?.maneuver || 'CONTINUE').replaceAll('_',' ').toLowerCase();
+  return maneuver.charAt(0).toUpperCase() + maneuver.slice(1) + (road ? ' onto ' + road : '');
+}
+function renderGuidance() {
+  const container = el('guidanceSteps');
+  container.replaceChildren();
+  const list = getSelectedRoute()?.properties?.guidance?.instructions ?? [];
+  el('guidanceCount').textContent = list.length ? list.length + ' steps' : 'Unavailable';
+  for (const instruction of list) {
+    if (!Array.isArray(instruction?.maneuverPoint)) continue;
+    const row = document.createElement('button');
+    row.type = 'button'; row.className = 'guidance-step';
+    const at = document.createElement('span');
+    at.className = 'step-distance';
+    at.textContent = distance(instruction.routeOffsetInMeters || 0) + ' from start';
+    const label = document.createElement('span');
+    label.className = 'step-label'; label.textContent = instructionLabel(instruction);
+    row.append(at,label);
+    row.addEventListener('click', () => state.map?.flyTo({
+      center: instruction.maneuverPoint, zoom: 16.5, duration: 650
+    }));
+    container.append(row);
+  }
+  if (!container.childElementCount) {
+    const empty = document.createElement('p');
+    empty.className='helper'; empty.textContent='No turn-by-turn steps returned for this route.';
+    container.append(empty);
+  }
+}
 async function selectRoute(index) {
   if (!state.routes?.features?.[index]) return;
   state.selected = index;
   drawRouteLines();
+  renderGuidance();
   document.querySelectorAll('.route-choice').forEach((button, n) => {
     button.classList.toggle('selected', n === index);
   });
@@ -247,6 +289,7 @@ async function planRoute(refresh = false) {
       guidance: { type: 'coded' }, costModel: { routeType: 'fast', traffic: 'live' }
     });
     if (!state.routes?.features?.length) throw new Error('Routing returned no available route.');
+    state.selected = 0;
     drawRouteLines();
     state.waypointMarkers.forEach((marker) => marker.remove());
     state.waypointMarkers = locations.map((coord, index) =>
@@ -254,13 +297,43 @@ async function planRoute(refresh = false) {
         .setLngLat(coord).addTo(state.map)
     );
     await renderRoutes();
-    status('Routes use live traffic at calculation time. GPS tracking and rerouting are not implemented yet.');
+    status('Traffic-aware route ready. Tap a step to inspect a maneuver.');
   } catch (err) {
     console.error('Route planning failed:', err);
     status('Route failed: ' + (err?.message || 'unknown error') + '. Verify your Routing and Search API permissions.', true);
   } finally { busy(false); }
 }
 
+function stopGPSFollow() {
+  if (state.watchId !== null) navigator.geolocation.clearWatch(state.watchId);
+  state.watchId = null;
+  el('followGPS').textContent = 'Follow GPS (preview)';
+  el('followGPS').classList.remove('active');
+  status('GPS preview stopped. Route still available.');
+}
+function toggleGPSFollow() {
+  if (state.watchId !== null) { stopGPSFollow(); return; }
+  if (!state.ready || !navigator.geolocation) {
+    status('Connect map and permit access to your location.', true); return;
+  }
+  el('followGPS').textContent = 'Stop GPS follow';
+  el('followGPS').classList.add('active');
+  status('Foreground location preview active. Not validated for driving.');
+  state.watchId = navigator.geolocation.watchPosition(
+    (position) => {
+      const point = [position.coords.longitude, position.coords.latitude];
+      state.gps = point;
+      if (!state.marker) {
+        const dot=document.createElement('div');dot.className='gps-dot';
+        state.marker=new Marker({element:dot}).setLngLat(point).addTo(state.map);
+      } else state.marker.setLngLat(point);
+      state.map.easeTo({center:point,zoom:Math.max(state.map.getZoom(),15),duration:450});
+      el('gpsAccuracy').textContent='GPS accuracy ±'+Math.round(position.coords.accuracy)+' m';
+    },
+    (error) => { stopGPSFollow(); status('GPS unavailable: '+error.message,true); },
+    {enableHighAccuracy:true,maximumAge:2500,timeout:12000}
+  );
+}
 el('connect').addEventListener('click', connect);
 el('apiKey').addEventListener('keydown', (event) => { if (event.key === 'Enter') connect(); });
 el('plan').addEventListener('click', () => planRoute());
@@ -270,6 +343,7 @@ el('demoOrigin').addEventListener('click', () => setOrigin('demo'));
 el('gpsOrigin').addEventListener('click', () => setOrigin('gps'));
 el('locate').addEventListener('click', locate);
 el('fit').addEventListener('click', fitRoute);
+el('followGPS').addEventListener('click', toggleGPSFollow);
 el('trafficToggle').addEventListener('change', (event) => {
   try { setTrafficOverlay(event.target.checked); }
   catch (err) { status('Traffic map layer unavailable: ' + err.message, true); }
