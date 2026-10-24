@@ -615,3 +615,89 @@ body[data-mode="navigation"] #idleVeil{opacity:0}
  .idle-prompt,.search-sheet,.journey-pod,.journey-dock,.routes-tray,
  .nav-hud,.nav-bar,.settings-panel{animation:none!important}
 }
+
+/* Glide v3.3: destination entry belongs at the center of the map.
+   Only the route summary/preview is docked at the bottom. */
+.search-sheet{
+  top:var(--search-center-y,50%);
+  left:50%;right:auto;bottom:auto;
+  width:min(560px,calc(100vw - 38px));
+  max-height:min(640px,calc(var(--search-available-height,100dvh) - 32px));
+  padding:20px 26px 21px;
+  transform:translate(-50%,-50%);
+  display:flex;flex-direction:column;overflow:hidden;
+  border-radius:32px;
+  animation:glide-search-center 700ms var(--glide-weight) both;
+}
+.search-sheet .sheet-heading{flex:0 0 auto}
+.search-sheet .search-form{flex:0 0 auto}
+.search-sheet .origin-bar{flex:0 0 auto}
+.search-sheet .origin-options{flex:0 0 auto}
+.search-sheet .search-feedback{flex:0 0 auto}
+.search-sheet .search-results{
+  max-height:min(250px,35dvh);
+  flex-shrink:1;min-height:0;overflow-y:auto;
+  overscroll-behavior:contain;
+}
+.search-sheet .recent-section{
+  display:flex;flex-direction:column;min-height:0;
+  overflow:hidden;flex-shrink:1;
+}
+.search-sheet .recent-section .search-results{max-height:min(250px,31dvh)}
+.search-sheet .search-helper{flex:0 0 auto}
+.search-sheet .result-pin{
+  width:28px;min-width:28px;
+  display:grid;place-items:center;
+}
+/* Destination result icon and mapped destination marker use the exact same
+   donut language; the smaller size suits dense result lists. */
+.search-sheet .result-donut{
+  width:15px;height:15px;border-radius:50%;
+  background:#0D1114;
+  box-shadow:inset 0 0 0 2.5px #DCE3E6;
+  display:block;
+}
+.destination-donut{
+  width:17px;height:17px;
+  border-radius:50%;
+  background:#0B1115;
+  box-shadow:
+    inset 0 0 0 2.75px #E7EAED,
+    0 0 10px rgba(207,221,227,.10),
+    0 2px 7px rgba(0,0,0,.30);
+}
+.destination-donut::after{display:none}
+/* A compact origin dot visually balances the 17px hollow destination. */
+.route-origin-dot{
+  width:11px;height:11px;border-radius:50%;
+  background:#CED8DE;
+  box-shadow:0 0 0 3px rgba(205,219,225,.105),0 2px 9px rgba(0,0,0,.30);
+}
+.current-position-dot{
+  width:13px;height:13px;
+  border:2px solid #0D1418;
+  box-shadow:0 0 0 4px rgba(220,228,231,.085),0 2px 11px rgba(0,0,0,.34);
+}
+@keyframes glide-search-center{
+  from{opacity:0;transform:translate(-50%,calc(-50% + 24px)) scale(.985)}
+  to{opacity:1;transform:translate(-50%,-50%) scale(1)}
+}
+@media(max-width:760px){
+  .search-sheet{
+    top:var(--search-center-y,50%);
+    left:50%;right:auto;bottom:auto;
+    width:calc(100vw - 24px);
+    max-height:calc(var(--search-available-height,100dvh) - 24px);
+    padding:16px 19px 17px;
+    transform:translate(-50%,-50%);
+    border-radius:29px;
+    animation:glide-search-center 700ms var(--glide-weight) both;
+  }
+  .search-sheet .search-results{max-height:min(220px,27dvh)}
+  .search-sheet .recent-section .search-results{max-height:min(220px,27dvh)}
+  /* The map control does not compete with the centered search bubble. */
+  body[data-mode="search"] .map-fab{display:none}
+}
+@media(prefers-reduced-motion:reduce){
+  .search-sheet{animation:none!important}
+}

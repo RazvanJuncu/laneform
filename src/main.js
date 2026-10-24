@@ -3,6 +3,7 @@ import { calculateRoute, discoverPlaces } from '@tomtom-org/maps-sdk/services';
 import { Map as MapLibreMap, Marker, LngLatBounds, setWorkerUrl } from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import mapStyle from './glide-map-style.json';
+import { splitPathByDistance } from './route-progress.js';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 
@@ -222,34 +223,53 @@ function drawRoutes() {
   if (!state.routes || (state.mode !== 'preview' && state.mode !== 'navigation')) return;
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
 
-  const stroke = (feature, color, strokeWidth, opacity, blur = 0) => {
-    const segments = routeSegments(feature);
+  // Segments can be the original provider geometry, or the locally split
+  // traveled/untraveled polyline during simulation.
+  const stroke = (segments, color, strokeWidth, opacity, blur = 0) => {
     ctx.save();
     ctx.lineWidth = strokeWidth; ctx.globalAlpha = opacity;
     ctx.strokeStyle = color;
     if (blur) { ctx.shadowColor = color; ctx.shadowBlur = blur; }
     for (const segment of segments) {
+      if (!segment || segment.length < 2) continue;
       ctx.beginPath();
       let first = true;
       for (const c of segment) {
         if (!Array.isArray(c) || !Number.isFinite(c[0]) || !Number.isFinite(c[1])) continue;
         const p = map.project(c);
-        if (first) { ctx.moveTo(p.x,p.y); first = false; }
-        else ctx.lineTo(p.x,p.y);
+        if (first) { ctx.moveTo(p.x, p.y); first = false; }
+        else ctx.lineTo(p.x, p.y);
       }
       if (!first) ctx.stroke();
     }
     ctx.restore();
   };
-  state.routes.features.forEach((route, i) => {
-    if (i !== state.selected) stroke(route, '#66747E', 2.4, .36);
-  });
+  // Other routes are only useful during selection, not active walkthrough.
+  if (state.mode === 'preview') {
+    state.routes.features.forEach((route, i) => {
+      if (i !== state.selected) stroke(routeSegments(route), '#66747E', 2.4, .36);
+    });
+  }
+
   const feature = selectedRoute();
   if (!feature) return;
-  // Satin-platinum guidance: a precise line with very restrained diffuse
-  // light. No oversized bloom, neon accent or opaque black casing.
-  stroke(feature, ROUTE_HALO, 7.5, .14, 5);
-  stroke(feature, SIGNAL, state.mode === 'navigation' ? 5.4 : 4.7, .99);
+  const sim = state.sim;
+  if (state.mode === 'navigation' && sim.active && sim.points.length >= 2) {
+    const { traveled, remaining } = splitPathByDistance(
+      sim.points, sim.cumulative, sim.distance
+    );
+    // The traveled section is a matte graphite line. No halo, shadow,
+    // platinum core or extra trail; only the road ahead is illuminated.
+    if (traveled.length >= 2) stroke([traveled], '#73818B', 3.4, .63);
+    if (remaining.length >= 2) {
+      stroke([remaining], ROUTE_HALO, 7.5, .14, 5);
+      stroke([remaining], SIGNAL, 5.2, .99);
+    }
+    return;
+  }
+
+  stroke(routeSegments(feature), ROUTE_HALO, 7.5, .14, 5);
+  stroke(routeSegments(feature), SIGNAL, 4.7, .99);
 }
 function fitRoute() {
   if (!state.map || !selectedRoute()) return;
@@ -391,6 +411,7 @@ async function tryUseGrantedLocation() {
   } catch { /* API not supported */ }
 }
 function openSearch() {
+  updateSearchViewport();
   setMode('search');
   $('searchFeedback').textContent = '';
   $('searchResults').replaceChildren();
@@ -409,6 +430,33 @@ function backToIdle() {
     pitch:0,bearing:0,padding:{top:0,bottom:0,left:0,right:0},duration:MOTION
   });
 }
+// Search stays centered. The chosen destination becomes a journey bubble
+// that gracefully descends to the lower preview position.
+function revealPreviewFromSearch(sourceRect) {
+  if (!sourceRect || isReducedMotion || typeof $('previewSheet').animate !== 'function') return;
+  const preview = $('previewSheet');
+  const targetRect = preview.getBoundingClientRect();
+  const dx = sourceRect.left + sourceRect.width / 2 -
+    (targetRect.left + targetRect.width / 2);
+  const dy = sourceRect.top + sourceRect.height / 2 -
+    (targetRect.top + targetRect.height / 2);
+  const base = window.innerWidth <= 760 ? '' : 'translateX(-50%) ';
+  preview.animate([
+    {opacity:0.28, transform:base+`translate(${dx}px,${dy}px) scale(.91)`},
+    {opacity:1, transform:base+'translate(0px,0px) scale(1)'}
+  ], {duration:850, easing:'cubic-bezier(.19,1,.22,1)'});
+}
+// Keep the search bubble centered in the *visible* viewport when a phone
+// keyboard changes the available height, rather than hiding the field below.
+function updateSearchViewport() {
+  const v = window.visualViewport;
+  if (v) {
+    document.documentElement.style.setProperty('--search-center-y',
+      (v.offsetTop + v.height / 2) + 'px');
+    document.documentElement.style.setProperty('--search-available-height',
+      v.height + 'px');
+  }
+}
 function renderItemList(container,items) {
   container.replaceChildren();
   for (const item of items) {
@@ -418,7 +466,9 @@ function renderItemList(container,items) {
     row.className = 'search-result';
     const marker = document.createElement('span');
     marker.className = 'result-pin'; marker.setAttribute('aria-hidden','true');
-    marker.textContent = '⌖';
+    const ring = document.createElement('span');
+    ring.className = 'result-donut';
+    marker.append(ring);
     const copy = document.createElement('span');
     copy.className = 'result-copy';
     const name = document.createElement('strong');
@@ -526,7 +576,10 @@ async function planRoute(force = false, chosenPlace = null) {
   if (state.routes && signature === state.routeSignature && now-state.routeAt < ROUTE_TTL) {
     if (force) toast('Traffic was updated recently. Try again shortly.');
     else {
+      const searchRect = state.mode === 'search' ?
+        $('searchSheet').getBoundingClientRect() : null;
       refreshMarkers();setMode('preview');renderPreview();overview();
+      revealPreviewFromSearch(searchRect);
       toast('Using your recent route.');
     }
     return;
@@ -558,10 +611,13 @@ async function planRoute(force = false, chosenPlace = null) {
       name:state.destinationName,address:chosenPlace.address || '',
       position:destination
     });
+    const searchRect = state.mode === 'search' ?
+      $('searchSheet').getBoundingClientRect() : null;
     refreshMarkers();
     setMode('preview');
     renderPreview();
     overview();
+    revealPreviewFromSearch(searchRect);
     updateTrafficVisibility();
   } catch (error) {
     console.error('Glide routing:',error);
@@ -711,6 +767,7 @@ function positionSim(meters,forceCamera=false){
   sim.marker?.setLngLat(p.point).setRotation(p.angle);
   navHud();
   if(sim.follow)navCamera(p,forceCamera);
+  requestDraw(); // update the muted traveled route even when camera following is off
   if(sim.distance>=sim.length)pauseSim();
 }
 function startNavigationDemo(){
@@ -786,6 +843,10 @@ function toggleRoutesTray() {
   $('routesToggle').setAttribute('aria-expanded',String(!expanded));
 }
 function attachEvents() {
+  updateSearchViewport();
+  window.visualViewport?.addEventListener('resize',updateSearchViewport);
+  window.visualViewport?.addEventListener('scroll',updateSearchViewport);
+  window.addEventListener('resize',updateSearchViewport);
   $('idlePrompt').addEventListener('click',openSearch);
   $('searchBack').addEventListener('click',backToIdle);
   $('searchDismiss').addEventListener('click',backToIdle);

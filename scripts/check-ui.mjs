@@ -64,6 +64,20 @@ assert.ok(js.includes("mapMarkerElement('destination-donut'") &&
 assert.ok(css.includes('.destination-donut') && css.includes('#idleVeil') &&
   css.includes('glide-idle-center'),
   'V3.2 marker, dark veil and centered bubble styles are missing');
+assert.ok(css.includes('top:var(--search-center-y,50%)'),
+  'Search should be centered within the visible viewport, not bottom anchored');
+assert.ok(css.includes('.search-sheet .result-donut'),
+  'Search results must share the donut symbol from map destinations');
+assert.ok(js.includes("ring.className = 'result-donut'"),
+  'Search result pin glyph must use donut rings');
+assert.ok(js.includes('splitPathByDistance(') &&
+  js.includes("if (traveled.length >= 2) stroke([traveled], '#73818B'"),
+  'Simulated route must show an unlit, gray traveled segment');
+assert.ok(js.includes('requestDraw(); // update the muted traveled route'),
+  'Route progress must be redrawn even when camera follow is off');
+assert.ok(js.includes('revealPreviewFromSearch(searchRect)'),
+  'Centered selection must migrate gracefully to bottom preview');
+console.log('Glide v3.3 centered search, ring icons and route trail checks passed.');
 console.log('Glide v3.2 borderless bubbles, location startup and donut marker checks passed.');
 console.log('Glide v3.1 pod, pill dock and weighted-motion checks passed.');
 console.log('Glide Interface v3 structural checks passed ('+ids.length+' components).');

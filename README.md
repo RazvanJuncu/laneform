@@ -175,3 +175,13 @@ The route-preview screen has deliberately abandoned stacked information-card row
 - **Start:** now only reads `Start`, no external-link arrow; still explicitly labeled *Start simulated navigation* for assistive technology. Does not initiate live GPS navigation.
 - **Maneuver bubble:** removes the needless *Route simulation* header and decorative dot. Its width follows content within a safe maximum. The next maneuver retains legible distance and road instruction.
 - **Motion:** softened center rise, weighted lateral glide and intentional camera motion (~930 ms), disabled for reduced-motion users. No additional TomTom calls.
+
+## Glide v3.3 — centered destination search and path continuity
+
+- The **entire destination selection flow** (search input, origin choice, results and recent places) sits in a content-sized centered bubble on desktop and mobile. The search bubble responds to `visualViewport` changes so the field moves into the visible portion of the screen when the phone's keyboard opens. Only the **route preview** uses the bottom journey pod/dock layout.
+- After selecting a result, a weighted transition visually carries the new journey preview from the center down into its lower anchor. The effect is suppressed for reduced-motion users. Search remains explicit; tapping a result calculates the route using existing TomTom caching/throttling.
+- Search result markers now use the same hollow **donut ring** as map destinations. Destination rings are reduced to 17px and route-origin dots to 11px with minimal halos, giving the markers equal visual weight.
+- In simulated navigation the selected path is **split at the exact simulated vehicle position**. The portion behind it uses a muted gray line with no halo; only the untraveled portion keeps the restrained platinum glow. Scrubbing and camera-follow-off continue updating the split without any additional TomTom calls.
+- `src/route-progress.js` is a pure geometry helper. Its split behavior is checked by `scripts/check-route-progress.mjs` in the existing GitHub Actions test pipeline.
+
+This remains an experimental simulator, not live turn-by-turn or verified lane navigation.
