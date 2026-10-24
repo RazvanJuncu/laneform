@@ -19,7 +19,8 @@ const state = {
   selected: 0, watchId: null,
   placeCache: new Map(), lastRouteSignature: null, lastRouteAt: 0,
   lastRouteAttemptAt: 0, trafficExplicit: false, lastTrafficAt: 0,
-  requestCounts: { search: 0, route: 0 }
+  requestCounts: { search: 0, route: 0 },
+  routeCanvas: null, routeDrawScheduled: false
 };
 function normalizedQuery(query) {
   return query.trim().normalize('NFKC').toLocaleLowerCase('ro-RO').replace(/\s+/g,' ');
@@ -60,47 +61,62 @@ function baseTileURL(key) {
   return 'https://api.tomtom.com/maps/orbis/display/raster/tile/{z}/{x}/{y}' +
     '?apiVersion=2&style=street-dark&tileSize=256&key=' + encodeURIComponent(key);
 }
+// The vector tiles expose traffic_level = current speed / free-flow speed.
+// Only significant delays are drawn; free-flow roads never become green lines.
 function trafficTileURL(key) {
-  return 'https://api.tomtom.com/traffic/map/4/tile/flow/relative-delay/{z}/{x}/{y}.png' +
-    '?tileSize=256&key=' + encodeURIComponent(key);
+  return 'https://api.tomtom.com/traffic/map/4/tile/flow/relative-delay/{z}/{x}/{y}.pbf' +
+    '?key=' + encodeURIComponent(key);
 }
 function setTrafficOverlay(enabled) {
   const map = state.map;
   if (!map || !state.ready || !map.getStyle()) return;
-  // A traffic-aware route is calculated independently. Tiles are optional and
-  // are never loaded for the entire city at first map connection.
-  const permitted = Boolean(enabled) &&
-    Boolean(state.routes || state.trafficExplicit) &&
+  const permitted = Boolean(enabled) && Boolean(state.routes || state.trafficExplicit) &&
     map.getZoom() >= TRAFFIC_MIN_ZOOM;
-  if (!map.getSource('laneform-traffic')) {
+  const sourceId = 'laneform-traffic-vectors';
+  const layerId = 'laneform-congestion-lines';
+  if (!map.getSource(sourceId)) {
     if (!permitted) return;
-    map.addSource('laneform-traffic', {
-      type: 'raster', tiles: [trafficTileURL(el('apiKey').value.trim())],
-      tileSize: 256, minzoom: 0, maxzoom: 16
+    map.addSource(sourceId, {
+      type: 'vector', tiles: [trafficTileURL(el('apiKey').value.trim())],
+      minzoom: 0, maxzoom: 16
     });
     map.addLayer({
-      id: 'laneform-traffic-layer', type: 'raster', source: 'laneform-traffic',
-      paint: { 'raster-opacity': 0.95 }
+      id: layerId, type: 'line', source: sourceId, 'source-layer': 'Traffic flow',
+      filter: ['any',
+        ['==', ['get', 'road_closure'], true],
+        ['all', ['has', 'traffic_level'],
+          ['<', ['to-number', ['get', 'traffic_level'], 1], 0.6]]
+      ],
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: {
+        'line-color': ['case',
+          ['==', ['get', 'road_closure'], true], '#f35d5d',
+          ['<', ['to-number', ['get', 'traffic_level'], 1], 0.35], '#ed4246',
+          '#f29b4b'
+        ],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 12, 2.4, 15, 4, 18, 5.5],
+        'line-opacity': 0.86
+      }
     });
     state.lastTrafficAt = Date.now();
-    drawRouteLines();
     return;
   }
-  if (map.getLayer('laneform-traffic-layer')) {
-    const target = permitted ? 'visible' : 'none';
-    if (map.getLayoutProperty('laneform-traffic-layer', 'visibility') === target) return;
-    map.setLayoutProperty('laneform-traffic-layer', 'visibility', target);
-    drawRouteLines();
+  const target = permitted ? 'visible' : 'none';
+  if (map.getLayer(layerId) &&
+      map.getLayoutProperty(layerId, 'visibility') !== target) {
+    map.setLayoutProperty(layerId, 'visibility', target);
   }
 }
 function refreshTrafficTilesOnDemand() {
   const map = state.map;
-  if (!map || !map.getSource('laneform-traffic') ||
-      !el('trafficToggle').checked || map.getZoom() < TRAFFIC_MIN_ZOOM) return;
-  if (Date.now() - state.lastTrafficAt < TRAFFIC_REFRESH_MS) return;
-  // This is only invoked by an explicit traffic/route refresh, not by a timer.
-  map.refreshTiles('laneform-traffic');
-  state.lastTrafficAt = Date.now();
+  if (!map || !map.getSource('laneform-traffic-vectors') ||
+      !el('trafficToggle').checked || map.getZoom() < TRAFFIC_MIN_ZOOM ||
+      Date.now() - state.lastTrafficAt < TRAFFIC_REFRESH_MS) return;
+  // Refresh only when explicitly requested. Never poll the provider.
+  if (typeof map.refreshTiles === 'function') {
+    map.refreshTiles('laneform-traffic-vectors');
+    state.lastTrafficAt = Date.now();
+  }
 }
 async function connect() {
   const key = el('apiKey').value.trim();
@@ -114,6 +130,8 @@ async function connect() {
     // MapLibre would never use for a Bucharest viewport.
     if (state.watchId !== null) stopGPSFollow();
     if (state.map) state.map.remove();
+    if (state.routeCanvas) state.routeCanvas.remove();
+    state.routeCanvas = null;
     const style = {
       version: 8,
       sources: {
@@ -132,7 +150,13 @@ async function connect() {
       refreshExpiredTiles: false
     });
     state.map = map;
-    map.on('moveend', () => setTrafficOverlay(el('trafficToggle').checked));
+    prepareRouteCanvas();
+    map.on('move', scheduleRouteDraw);
+    map.on('resize', scheduleRouteDraw);
+    map.on('moveend', () => {
+      setTrafficOverlay(el('trafficToggle').checked);
+      scheduleRouteDraw();
+    });
     await new Promise((resolve, reject) => {
       if (map.loaded()) { resolve(); return; }
       const timer = setTimeout(() => reject(new Error('Map timed out while loading tiles.')), 25000);
@@ -144,6 +168,7 @@ async function connect() {
       });
     });
     state.ready = true;
+    scheduleRouteDraw();
     try { sessionStorage.setItem('laneform.tomtom.key', key); } catch { /* storage disabled */ }
     el('setup').hidden = true;
     el('planner').hidden = false;
@@ -162,6 +187,8 @@ async function connect() {
     status('Map connection failed: ' + (err?.message || 'unknown error'), true);
     try { state.map?.remove(); } catch { /* no cleanup necessary */ }
     state.map = null;
+    state.routeCanvas?.remove();
+    state.routeCanvas = null;
   } finally {
     el('connect').disabled = false;
   }
@@ -209,33 +236,77 @@ function fitRoute() {
     maxZoom: 16, duration: 650
   });
 }
+// Independent screen-space overlay. Does not depend on map style / vector
+// source load order, so congestion layers cannot cover or suppress the route.
+function prepareRouteCanvas() {
+  if (state.routeCanvas) state.routeCanvas.remove();
+  const canvas = document.createElement('canvas');
+  canvas.id = 'laneform-route-overlay';
+  canvas.setAttribute('aria-hidden', 'true');
+  Object.assign(canvas.style, {
+    position: 'fixed', inset: '0', width: '100%', height: '100%',
+    pointerEvents: 'none', zIndex: '2'
+  });
+  el('app').appendChild(canvas);
+  state.routeCanvas = canvas;
+}
+function scheduleRouteDraw() {
+  if (state.routeDrawScheduled) return;
+  state.routeDrawScheduled = true;
+  requestAnimationFrame(() => {
+    state.routeDrawScheduled = false;
+    drawRouteLines();
+  });
+}
 function drawRouteLines() {
-  const map = state.map;
-  if (!map || !state.ready || !map.getStyle() || !state.routes?.features?.length) return;
+  const map = state.map, canvas = state.routeCanvas;
+  if (!map || !canvas || !state.ready) return;
+  const mapRect = map.getContainer().getBoundingClientRect();
+  const ratio = Math.min(window.devicePixelRatio || 1, 2);
+  const width = Math.max(1, Math.round(mapRect.width * ratio));
+  const height = Math.max(1, Math.round(mapRect.height * ratio));
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width; canvas.height = height;
+  }
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, mapRect.width, mapRect.height);
+  if (!state.routes?.features?.length) return;
   const routes = state.routes.features;
   const selected = routes[state.selected];
-  if (selected?.geometry?.type !== 'LineString' || selected.geometry.coordinates.length < 2) {
-    console.error('Unexpected route geometry', selected?.geometry);
-    status('Routing returned an unsupported path geometry.', true);
+  if (selected?.geometry?.type !== 'LineString' ||
+      !Array.isArray(selected.geometry.coordinates) ||
+      selected.geometry.coordinates.length < 2) {
+    console.warn('Unsupported route geometry:', selected?.geometry);
     return;
   }
-  const sets = [
-    ['laneform-route-alternatives', routes.filter((_, i) => i !== state.selected), 'laneform-line-alternatives', '#c5d1d2', 5, 0.8],
-    ['laneform-route-selected', [selected], 'laneform-line-casing', '#122629', 13, 0.99],
-    ['laneform-route-selected', [selected], 'laneform-line-selected', '#d8f4a7', 7, 1],
-  ];
-  for (const [sourceId, features, layerId, color, width, opacity] of sets) {
-    const data = { type: 'FeatureCollection', features };
-    const source = map.getSource(sourceId);
-    if (source) source.setData(data);
-    else map.addSource(sourceId, { type: 'geojson', data });
-    if (!map.getLayer(layerId)) map.addLayer({
-      id: layerId, source: sourceId, type: 'line',
-      layout: { 'line-join': 'round', 'line-cap': 'round' },
-      paint: { 'line-color': color, 'line-width': width, 'line-opacity': opacity }
-    });
-    map.moveLayer(layerId);
-  }
+  const trace = (route, color, lineWidth, opacity = 1) => {
+    const coordinates = route?.geometry?.coordinates;
+    if (!Array.isArray(coordinates) || coordinates.length < 2) return;
+    ctx.beginPath();
+    let started = false;
+    for (const coord of coordinates) {
+      if (!Array.isArray(coord) || !Number.isFinite(coord[0]) ||
+          !Number.isFinite(coord[1])) continue;
+      const point = map.project(coord);
+      if (!started) { ctx.moveTo(point.x, point.y); started = true; }
+      else ctx.lineTo(point.x, point.y);
+    }
+    if (!started) return;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    ctx.globalAlpha = opacity;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  };
+  routes.forEach((route, index) => {
+    if (index !== state.selected) trace(route, '#becbc7', 4, 0.65);
+  });
+  trace(selected, '#152526', 13, 0.96);
+  trace(selected, '#d8f4a7', 7);
 }
 function instructionLabel(instruction) {
   if (instruction?.message) return instruction.message;
@@ -272,7 +343,7 @@ function renderGuidance() {
 async function selectRoute(index) {
   if (!state.routes?.features?.[index]) return;
   state.selected = index;
-  drawRouteLines();
+  scheduleRouteDraw();
   renderGuidance();
   document.querySelectorAll('.route-choice').forEach((button, n) => {
     button.classList.toggle('selected', n === index);
@@ -371,7 +442,7 @@ async function planRoute(refresh = false) {
     state.lastRouteSignature = signature;
     state.lastRouteAt = Date.now();
     state.selected = 0;
-    drawRouteLines();
+    scheduleRouteDraw();
     state.waypointMarkers.forEach((marker) => marker.remove());
     state.waypointMarkers = locations.map((coord, index) =>
       new Marker({ color: index === 0 ? '#d8f4a7' : '#f0f6ed' })
@@ -381,6 +452,7 @@ async function planRoute(refresh = false) {
     // Route fitting fires 'zoomend'; request traffic tiles only for the final
     // viewport, rather than the full initial Bucharest overview.
     if (refresh) refreshTrafficTilesOnDemand();
+    scheduleRouteDraw();
     status('Traffic-aware route ready. Tap a step to inspect a maneuver.');
   } catch (err) {
     console.error('Route planning failed:', err);
