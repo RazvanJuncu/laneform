@@ -90,7 +90,7 @@ function parseOptionalGeoJSON(raw){
   catch{return blankCollection();}
 }
 async function processOsm(xml){
-  const bytes=validateOsmXML(xml);
+  validateOsmXML(xml);
   status('Reconstructing street lanes locally…');
   const lib=await engine();
   const config={
@@ -100,7 +100,7 @@ async function processOsm(xml){
   };
   let network;
   try{
-    network=new lib.JsStreetNetwork(bytes,'',config);
+    network=new lib.JsStreetNetwork(xml,'',config);
     return {
       lanes:validateGeojson(network.toLanePolygonsGeojson()),
       markings:parseOptionalGeoJSON(network.toLaneMarkingsGeojson()),
