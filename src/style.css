@@ -787,3 +787,65 @@ body[data-mode="navigation"] #idleVeil{opacity:0}
 .developer-details #laneCoverage{
   color:#A7B4BE;line-height:1.55;overflow-wrap:anywhere;
 }
+
+
+/* Street Geometry Lab: opt-in diagnostic, absent from normal driving UI.
+   The osm2streets reconstruction uses muted steel, never the active route
+   platinum styling and never an authoritative lane recommendation. */
+.settings-panel{max-height:calc(100dvh - 94px);overflow-y:auto;scrollbar-width:thin}
+.geometry-lab-details{
+  border-top:1px solid rgba(205,214,221,.09);
+  padding:15px 0;
+  color:#A7B3BB;
+  font-size:11px;
+}
+.geometry-lab-details>summary{
+  display:flex;align-items:center;justify-content:space-between;
+  cursor:pointer;min-height:30px;list-style:none;
+  font-size:12px;font-weight:550;color:#D7DEE2;
+}
+.geometry-lab-details>summary::-webkit-details-marker{display:none}
+.geometry-lab-details>summary span{font-size:10px;color:#82919B;font-weight:450}
+.geometry-lab-details p{line-height:1.55;margin:12px 0;color:#9DAAB3}
+.geometry-action{
+  display:block;width:100%;min-height:45px;border:0;border-radius:999px;
+  background:#DCE2E5;color:#12191E;font-size:12px;font-weight:650;
+  margin:15px 0 12px;
+}
+.geometry-action:disabled{opacity:.54}
+.geometry-upload{
+  display:block;font-size:11px;color:#BCC6CB;line-height:1.5;
+  margin:9px 0 5px;
+}
+#geometryUpload{max-width:100%;font-size:10px;color:#8E9CA4}
+#geometryStatus{color:#D0D9DE}
+.geometry-lab-details .geometry-legal{color:#7B8A93;font-size:10px}
+.geometry-inspect-pod{
+  position:fixed;z-index:6;bottom:25px;left:50%;
+  transform:translateX(-50%);
+  display:flex;align-items:center;justify-content:space-between;gap:20px;
+  width:min(480px,calc(100vw - 32px));
+  min-height:77px;padding:15px 17px 15px 25px;
+  border:0;border-radius:34px;
+  background:rgba(13,17,20,.96);
+  box-shadow:0 14px 40px rgba(0,0,0,.25);
+  animation:glide-bottom-dock 620ms cubic-bezier(.19,1,.22,1) both;
+}
+.geometry-caption{display:flex;flex-direction:column;gap:6px;min-width:0}
+.geometry-caption strong{font-size:14px;font-weight:550;color:#E7EAED}
+.geometry-caption span{font-size:11px;color:#A2B0B9;line-height:1.3}
+.geometry-exit{
+  min-height:43px;min-width:77px;border:0;border-radius:999px;
+  background:#283138;color:#E6EBEE;font-weight:550;font-size:12px
+}
+.geometry-exit:hover{background:#354149}
+body[data-mode="inspection"] .idle-prompt,
+body[data-mode="inspection"] .safety-footnote,
+body[data-mode="inspection"] .map-fab{display:none!important}
+@media(max-width:760px){
+  .geometry-inspect-pod{bottom:calc(12px + env(safe-area-inset-bottom));
+    padding:13px 15px 13px 21px;border-radius:30px}
+}
+@media(prefers-reduced-motion:reduce){
+  .geometry-inspect-pod{animation:none!important}
+}

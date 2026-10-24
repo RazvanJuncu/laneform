@@ -311,3 +311,8 @@ of an actual road corridor.
 self-hosted regional/global lane-data index (OSM extracts, diffs, licensed
 imagery and road authority information). Public shared endpoints aren't
 suitable for global turn-by-turn lane guidance at scale.
+
+
+## Experimental lane geometry integration
+
+An optional **Street geometry lab** in Preferences lazily loads the real osm2streets WebAssembly engine to reconstruct and overlay lane shapes from small OSM XML extracts. It makes no additional TomTom calls and never promotes reconstructed polygons into authoritative lane advice. See [integration guide](docs/osm2streets-integration.md).

@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "vite build",
+    "build": "node scripts/vendor-osm2streets.mjs && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node --check src/main.js && node scripts/check-ui.mjs && node scripts/check-route-progress.mjs && node scripts/check-lane-assist.mjs && node scripts/check-maneuver-guidance.mjs && node scripts/check-osm-lanes.mjs && node scripts/check-global-lanes.mjs && node scripts/check-osm-source.mjs"
+    "test": "node --check src/main.js && node scripts/check-ui.mjs && node scripts/check-route-progress.mjs && node scripts/check-lane-assist.mjs && node scripts/check-maneuver-guidance.mjs && node scripts/check-osm-lanes.mjs && node scripts/check-global-lanes.mjs && node scripts/check-osm-source.mjs && node --check src/street-geometry-lab.js && node scripts/check-street-lab.mjs"
   },
   "dependencies": {
     "@tomtom-org/maps-sdk": "1.0.0-rc.5",

@@ -10,6 +10,7 @@ import { fetchOsmLaneWays } from './osm-lane-source.js';
 import { deriveOsmLaneRecords } from './osm-lane-geometry.js';
 import { laneEventsFromCorridor, buildLaneTimeline, chooseLaneLookahead }
   from './lane-lookahead.js';
+import {wireGeometryLab,setLabVisibility} from './street-geometry-lab.js';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 
@@ -119,6 +120,8 @@ function setMode(mode) {
   $('previewSheet').hidden = mode !== 'preview';
   $('navHUD').hidden = mode !== 'navigation';
   $('navBar').hidden = mode !== 'navigation';
+  $('geometryInspectHUD').hidden = mode !== 'inspection';
+  setLabVisibility(state.map,mode === 'inspection');
   $('settingsPanel').hidden = true;
   $('recenter').title = mode === 'navigation' ? 'Follow simulated vehicle' : 'Recenter map';
   if (mode !== 'navigation') $('laneGuidance').hidden = true;
@@ -1056,6 +1059,7 @@ function attachEvents() {
   $('apiKey').addEventListener('keydown',event=>{if(event.key==='Enter')saveKey();});
   $('trafficToggle').addEventListener('change',updateTrafficVisibility);
   $('retryLaneLookup').addEventListener('click',()=>startOsmLaneLookup({force:true}));
+  wireGeometryLab(()=>state.map,setMode);
   $('backToPlanning').addEventListener('click',()=>{
     // Keep the calculated route in memory, but hide it during a new search.
     state.routeMarkers.forEach(x=>x.getElement().style.display='none');

@@ -130,6 +130,13 @@
     </details>
   </section>
 
+  <section id="geometryInspectHUD" class="geometry-inspect-pod" hidden aria-label="Experimental lane geometry preview">
+    <div class="geometry-caption"><strong>Street geometry</strong>
+      <span id="geometryInspectStatus">Reconstructed lanes · unverified</span>
+    </div>
+    <button id="geometryExit" type="button" class="geometry-exit">Close</button>
+  </section>
+
   <button id="recenter" type="button" class="map-fab" aria-label="Recenter map" title="Recenter map">
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7.6"/><circle cx="12" cy="12" r="2.1"/><path d="M12 1.8v3M12 19.2v3M1.8 12h3M19.2 12h3"/></svg>
   </button>
@@ -143,6 +150,15 @@
     </div>
     <p class="subtle-note">Stored in this browser tab. The base map doesn't require this key.</p>
     <label class="settings-switch"><span>Show major traffic delays</span><input id="trafficToggle" type="checkbox"></label>
+    <details class="geometry-lab-details">
+      <summary>Street geometry lab <span>Experimental</span></summary>
+      <p>Reconstruct actual lane shapes with osm2streets. A geometry preview, not verified lane guidance.</p>
+      <button id="geometryFetch" type="button" class="geometry-action">Inspect map center</button>
+      <label for="geometryUpload" class="geometry-upload">Or import an OSM XML / GeoJSON file</label>
+      <input id="geometryUpload" type="file" accept=".osm,.xml,.geojson,.json" aria-label="Import OSM XML or osm2streets GeoJSON">
+      <p id="geometryStatus" role="status" aria-live="polite">Runs only when requested. A small OSM area is downloaded and processed locally.</p>
+      <p class="geometry-legal">Requires a one-time 1.8 MB geometry engine download. Reconstructed shapes are inferred from OSM and must not be used for actual lane decisions.</p>
+    </details>
     <details class="developer-details"><summary>Technical details</summary>
       <p id="usageCounter">0 searches · 0 routes this tab</p>
       <p id="laneCoverage">Lane data: shown after a route is calculated</p>
