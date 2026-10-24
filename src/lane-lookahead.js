@@ -6,7 +6,7 @@
 // Data: OSM turn markings, NOT verified physical lane connectivity.
 // Deliberately conservative: unmatched, conditional, ambiguous, or reversed
 // road markings produce no lane advice. No network or DOM dependencies.
-import { routeProfile, positionAtDistance, normalizeOsmTurnLanes } from './osm-lane-geometry.js';
+import { routeProfile, positionAtDistance, normalizeOsmTurnLanes, maneuverDirection } from './osm-lane-geometry.js';
 
 const RAD=Math.PI/180;
 const EARTH=6371000;
@@ -171,14 +171,67 @@ export function buildLaneTimeline(route,providerRecords=[],osmManeuverRecords=[]
   }
   return [...byKey.values()].sort((a,b)=>a.offset-b.offset);
 }
+// Gate anticipatory advice by the actual ordered route maneuvers.
+// An upcoming right-turn lane MUST NOT appear before an earlier left turn.
+// Without a verified lane-to-lane graph we cannot safely pre-position a
+// driver through that left for a later right, so the advice waits.
+function maneuverFamily(direction) {
+  if(typeof direction!=='string')return null;
+  if(direction==='STRAIGHT')return 'STRAIGHT';
+  if(direction.endsWith('_LEFT')||direction==='LEFT')return 'LEFT';
+  if(direction.endsWith('_RIGHT')||direction==='RIGHT')return 'RIGHT';
+  return null;
+}
+function laneAdviceMatchesManeuver(guidance, instruction) {
+  const expected=maneuverFamily(maneuverDirection(instruction));
+  if(!expected)return true; // unknown maneuver => don't fabricate intent
+  const recommended=guidance?.lanes?.filter(lane=>lane.recommended) || [];
+  return recommended.length>0 && recommended.every(lane=>
+    maneuverFamily(lane.follow)===expected);
+}
 export function chooseLaneLookahead(timeline,progressMeters,{
-  horizonMeters=1100,minimumMeters=14
+  horizonMeters=1100,minimumMeters=14,nextManeuver=null,
+  instructions=[],turnCooldownMeters=40,maneuverToleranceMeters=35
 }={}){
-  if(!Array.isArray(timeline))return null;
+  if(!Array.isArray(timeline)||!Number.isFinite(progressMeters))return null;
+
+  // While leaving a just-completed bend/junction the GPS route offset can
+  // advance to the next maneuver before the car has left the intersection.
+  // Wait for that maneuver to clear before suggesting another lane.
+  if(Array.isArray(instructions) && instructions.some(instruction=>{
+    const offset=instruction?.routeOffsetInMeters;
+    return Number.isFinite(offset) && offset<=progressMeters &&
+      progressMeters-offset<turnCooldownMeters &&
+      maneuverFamily(maneuverDirection(instruction))!==null &&
+      maneuverFamily(maneuverDirection(instruction))!=='STRAIGHT';
+  }))return null;
+
+  const imminent=nextManeuver?.type==='turn' &&
+    Number.isFinite(nextManeuver.distance) &&
+    Number.isFinite(nextManeuver.instruction?.routeOffsetInMeters)
+    ? nextManeuver : null;
+  const limit=imminent ? imminent.instruction.routeOffsetInMeters : Infinity;
+
   for(const record of timeline){
+    if(!Number.isFinite(record?.offset))continue;
     const d=record.offset-progressMeters;
     if(d<minimumMeters)continue;
     if(d>horizonMeters)break;
+
+    // Route order wins over suggestion distance and provider ranking.
+    // A later junction may be in the lookahead window but is not yet
+    // actionable; first complete the intervening turn.
+    if(record.offset>limit+maneuverToleranceMeters)break;
+
+    if(imminent && Math.abs(record.offset-limit)<=maneuverToleranceMeters){
+      // Provider turn-lane sections are tied to specific instructions.
+      if(Number.isInteger(record.index) && record.index!==imminent.index)
+        continue;
+      // E.g. "turn LEFT in 252m" and a highlighted RIGHT-only lane at
+      // the same junction. Treat that as contradictory source data.
+      if(!laneAdviceMatchesManeuver(record.guidance,imminent.instruction))
+        continue;
+    }
     return {...record.guidance,distanceToManeuver:d,at:record.offset};
   }
   return null;

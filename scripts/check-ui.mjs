@@ -109,6 +109,9 @@ assert.ok(js.includes("const text = query; // Worldwide search") &&
 assert.ok(js.includes('horizonMeters:1100') &&
   js.includes("state.osmCoverageMeters"),
   'Proactive lane lookahead and bounded corridor reporting must be implemented');
+assert.ok(js.includes("nextManeuver:nextState,instructions"),
+  'HUD lane cue must use actual next maneuver to block later intersections');
+console.log('Glide route-ordered lane guidance regression wiring passed.');
 console.log('Glide global route corridor and predictive lane checks passed.');
 console.log('Glide multi-source lane integration and privacy checks passed.');
 console.log('Glide lane-assist UI connection checks passed.');

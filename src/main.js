@@ -908,7 +908,8 @@ function navHud(){
   // Anticipate mapped lane changes even when the route continues straight
   // and TomTom did not generate a maneuver at that intersection.
   const laneData=chooseLaneLookahead(laneRecords(route),offset,{
-    horizonMeters:1100,minimumMeters:14
+    horizonMeters:1100,minimumMeters:14,
+    nextManeuver:nextState,instructions
   });
   renderLaneAssistance(laneData);
 }

@@ -241,3 +241,32 @@ made. Do not use the simulated guidance for real-world driving.
 - **Testing:** `scripts/check-osm-lanes.mjs` exercises geometry matching, left/right directions, oneway backward tagging, ambiguity rejection and no-data fallback. A green build **does not verify real OSM coverage or live Overpass availability**.
 
 **Next step:** The actual distinctive Glide feature is a field-checked directed lane graph across Piața Danny Huwe/Răzoare and other selected complex junctions. OSM `type=connectivity` relations, aerial imagery and on-site road markings can help construct that graph, but they must be reconciled manually when incomplete or contradictory. Ordinary GPS does not determine the current traffic lane. Until independently verified, never present *mapped arrows* as confirmed intersection lane-continuity guidance. This prototype is not for actual driving.
+
+## Route-order safety gate for lane assistance
+
+Regression found during a simulated Bucharest route: the HUD showed an upcoming **left
+turn in 252 m**, while a TomTom lane event for a **later right turn in 653 m**
+highlighted the right-turn lane. The display was misleading: the standalone
+lane-event lookahead was unaware of intervening turn instructions.
+
+The safety gate in `src/lane-lookahead.js` now:
+
+- Treats the next actual TomTom maneuver as a hard ordering barrier. Lane
+  recommendations for intersections **after** that turn stay hidden until the
+  earlier turn is completed.
+- Rejects a lane provider's recommended turn direction when it conflicts with
+  the corresponding immediate maneuver (e.g. RIGHT-only advice for LEFT).
+- Avoids showing guidance for the next maneuver during the first 40 m after a
+  direction-changing turn, when route offsets may already have switched to the
+  following instruction but the driver is still completing the intersection.
+- Continues allowing eligible mapped road markings for earlier junctions
+  **before** the next turn, where sufficient data exists, and does not query
+  external APIs for these safety checks.
+
+This is a **fail-closed guard**, not proof that the chosen lane before a turn
+remains suitable for the following turn. True optimal lane selection through
+closely spaced junctions requires the directed lane-continuity graph and
+reliable legal/restriction information. Until such coverage is available, the
+UI must suppress conflicting or distant recommendations rather than claiming
+a verified path. A regression test reproduces the exact 252 m left / 653 m
+right sequence.

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {laneEventsFromCorridor,buildLaneTimeline,chooseLaneLookahead}
   from '../src/lane-lookahead.js';
 import {routeLaneQuery} from '../src/osm-lane-source.js';
+import {nextManeuverState} from '../src/maneuver-guidance.js';
 
 // Synthetic roads in an arbitrary geography (not Bucharest), all units m.
 // Driver is traveling EAST through a junction with no TomTom turn instruction.
@@ -66,4 +67,60 @@ assert.ok(q.includes('way(around:125,'));
 assert.ok(q.includes('52.000000,13.'));
 assert.ok(!q.includes('Bucharest')&&!q.includes('București'));
 assert.ok(q.length<5500,'Global corridor request must remain bounded');
+// Regression: the UI shows LEFT in 252 m, while lane data for a
+// DIFFERENT RIGHT turn is 653 m ahead. NEVER show the future RIGHT lane
+// before the left turn; it could put the driver in the wrong approach lane.
+const successiveTurns=[
+  {routeOffsetInMeters:252,maneuver:'TURN_LEFT',
+    message:'Turn left onto Strada Constantin Titel Petrescu'},
+  {routeOffsetInMeters:653,maneuver:'TURN_RIGHT',
+    message:'Turn right onto the next road'}
+];
+const rightAhead={index:1,offset:653,guidance:{
+  source:'tomtom',status:'provider-recommendation',
+  lanes:[
+    {directions:['LEFT'],follow:null,recommended:false},
+    {directions:['RIGHT'],follow:'RIGHT',recommended:true}
+  ]
+}};
+const leftHere={index:0,offset:252,guidance:{
+  source:'tomtom',status:'provider-recommendation',
+  lanes:[
+    {directions:['LEFT'],follow:'LEFT',recommended:true},
+    {directions:['RIGHT'],follow:null,recommended:false}
+  ]
+}};
+const leftFirst=nextManeuverState(successiveTurns,0,1300);
+assert.equal(leftFirst.distance,252);
+assert.equal(chooseLaneLookahead([rightAhead],0,{
+  nextManeuver:leftFirst,instructions:successiveTurns}),null,
+  'A right-turn lane 653m away must not override the left turn 252m away');
+assert.equal(chooseLaneLookahead([leftHere,rightAhead],0,{
+  nextManeuver:leftFirst,instructions:successiveTurns})?.at,252,
+  'Only guidance for the left turn should be shown before it');
+assert.equal(chooseLaneLookahead([{...rightAhead,offset:252,index:0}],0,{
+  nextManeuver:leftFirst,instructions:successiveTurns}),null,
+  'Contradictory RIGHT-follow recommendation must be hidden for a LEFT turn');
+assert.equal(chooseLaneLookahead([rightAhead],270,{
+  nextManeuver:nextManeuverState(successiveTurns,270,1300),
+  instructions:successiveTurns}),null,
+  'Do not prematurely show the next maneuver while still clearing the previous turn');
+const postTurn=chooseLaneLookahead([rightAhead],310,{
+  nextManeuver:nextManeuverState(successiveTurns,310,1300),
+  instructions:successiveTurns});
+assert.equal(postTurn?.at,653);
+assert.equal(postTurn?.source,'tomtom');
+const straightBeforeLeft={
+  index:null,offset:150,guidance:{
+    source:'osm',status:'mapped-markings-unverified',
+    lanes:[
+      {directions:['LEFT'],follow:null,recommended:false},
+      {directions:['STRAIGHT'],follow:'STRAIGHT',recommended:true}
+    ]
+  }
+};
+assert.equal(chooseLaneLookahead([straightBeforeLeft,rightAhead],0,{
+  nextManeuver:leftFirst,instructions:successiveTurns})?.at,150,
+  'Mapped straight-only lane can be shown for a junction before the next turn');
+
 console.log('Glide global corridor and anticipatory lane-change tests passed.');
