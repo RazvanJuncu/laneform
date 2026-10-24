@@ -63,7 +63,8 @@ const backwardRoute={
   ]}}
 };
 const backwardWay={...way,id:3456,tags:{highway:'primary',
-  'turn:lanes:backward':'left|through|right'}};
+  'turn:lanes:backward':'left|through|right'},
+  geometry:[{lon:26.001,lat:44},{lon:26.005,lat:44}]};
 assert.deepEqual(matchOsmLaneForManeuver(backwardRoute,
   backwardRoute.properties.guidance.instructions[0],[backwardWay])
   ?.lanes.map(x=>x.recommended),[true,false,false],
