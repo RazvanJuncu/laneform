@@ -1,0 +1,22 @@
+{
+  "name": "laneform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@tomtom-org/maps-sdk": "1.0.0-rc.5",
+    "@turf/turf": "^7.0.0",
+    "culori": "^4.0.0",
+    "lodash-es": "^4.17.21",
+    "maplibre-gl": "^6.0.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "vite": "^8.0.0"
+  }
+}
