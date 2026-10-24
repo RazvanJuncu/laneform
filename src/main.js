@@ -64,6 +64,63 @@ function baseTileURL(key) {
 }
 // The vector tiles expose traffic_level = current speed / free-flow speed.
 // Only significant delays are drawn; free-flow roads never become green lines.
+// True neutral monochrome map, not a brown-tinted raster.
+function fallbackMonoRasterStyle(key) {
+  return {
+    version: 8,
+    sources: {
+      'glide-mono-raster': {
+        type: 'raster', tiles: [baseTileURL(key)], tileSize: 256,
+        minzoom: 0, maxzoom: 18, attribution: '© TomTom'
+      }
+    },
+    layers: [
+      { id: 'glide-background', type: 'background',
+        paint: { 'background-color': '#0B0F12' } },
+      { id: 'glide-mono-raster', type: 'raster', source: 'glide-mono-raster',
+        paint: {
+          'raster-saturation': -1, 'raster-contrast': 0.16,
+          'raster-brightness-min': 0.03, 'raster-brightness-max': 0.70,
+          'raster-opacity': 0.95
+        }
+      }
+    ]
+  };
+}
+function attachTomTomKey(raw, key) {
+  if (typeof raw !== 'string') return raw;
+  try {
+    const url = new URL(raw);
+    if (!url.hostname.endsWith('tomtom.com')) return raw;
+    if (!url.searchParams.has('key')) url.searchParams.set('key', key);
+    return url.toString();
+  } catch { return raw; }
+}
+async function loadGlideStyle(key) {
+  // Official Orbis Assets mono-dark vector style. One style request when the
+  // user explicitly connects; no automatic reconnect or style polling.
+  const url = 'https://api.tomtom.com/maps/orbis/assets/styles/0.*/style' +
+    '?apiVersion=1&map=basic_mono-dark&key=' + encodeURIComponent(key);
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Assets API returned ' + response.status);
+    const style = await response.json();
+    if (style.version !== 8 || !Array.isArray(style.layers) || !style.sources)
+      throw new Error('Unexpected style structure');
+    for (const source of Object.values(style.sources)) {
+      if (source?.url) source.url = attachTomTomKey(source.url, key);
+      if (Array.isArray(source?.tiles))
+        source.tiles = source.tiles.map(url => attachTomTomKey(url, key));
+    }
+    if (style.sprite) style.sprite = attachTomTomKey(style.sprite, key);
+    if (style.glyphs) style.glyphs = attachTomTomKey(style.glyphs, key);
+    console.info('Glide: mono-dark vector map style enabled');
+    return style;
+  } catch (error) {
+    console.warn('Glide: mono vector style not available; using neutral raster:', error);
+    return fallbackMonoRasterStyle(key);
+  }
+}
 function trafficTileURL(key) {
   return 'https://api.tomtom.com/traffic/map/4/tile/flow/relative-delay/{z}/{x}/{y}.pbf' +
     '?key=' + encodeURIComponent(key);
@@ -133,28 +190,7 @@ async function connect() {
     if (state.map) state.map.remove();
     if (state.routeCanvas) state.routeCanvas.remove();
     state.routeCanvas = null;
-    const style = {
-      version: 8,
-      sources: {
-        'laneform-base': {
-          type: 'raster', tiles: [baseTileURL(key)], tileSize: 256,
-          minzoom: 0, maxzoom: 18, attribution: '© TomTom'
-        }
-      },
-      layers: [
-        { id: 'glide-background', type: 'background', paint: { 'background-color': '#0B0F12' } },
-        {
-          id: 'laneform-base-layer', type: 'raster', source: 'laneform-base',
-          paint: {
-            'raster-saturation': -0.72,
-            'raster-contrast': 0.12,
-            'raster-brightness-min': 0.015,
-            'raster-brightness-max': 0.80,
-            'raster-opacity': 0.96
-          }
-        }
-      ]
-    };
+    const style = await loadGlideStyle(key);
     const map = new MapLibreMap({
       container: 'map', style, center: BUCHAREST, zoom: 12,
       attributionControl: true, maxZoom: 20,
