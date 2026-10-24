@@ -1,8 +1,12 @@
 import { TomTomConfig } from '@tomtom-org/maps-sdk/core';
 import { calculateRoute, discoverPlaces } from '@tomtom-org/maps-sdk/services';
-import { Map as MapLibreMap, Marker, LngLatBounds } from 'maplibre-gl';
+import { Map as MapLibreMap, Marker, LngLatBounds, setWorkerUrl } from 'maplibre-gl';
+import mapLibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
+
+// MapLibre 6 cannot locate its vector worker inside a Vite bundle by default.
+setWorkerUrl(mapLibreWorkerUrl);
 
 // Approximate test coordinate only, NOT a validated position in a particular lane.
 const DEMO_ORIGIN = [26.061, 44.429];
@@ -211,16 +215,41 @@ async function connect() {
       setTrafficOverlay(el('trafficToggle').checked);
       scheduleRouteDraw();
     });
-    await new Promise((resolve, reject) => {
-      if (map.loaded()) { resolve(); return; }
-      const timer = setTimeout(() => reject(new Error('Map timed out while loading tiles.')), 25000);
-      map.once('load', () => { clearTimeout(timer); resolve(); });
-      map.on('error', (event) => {
-        // Some individual tile failures are recoverable. Keep rendering
-        // unless the map itself fails to initialize.
-        console.warn('MapLibre reported a tile/style error:', event.error);
-      });
+    // If vector sources fail to finish, do not leave the user on a gray map.
+    // Retry with the known working grayscale raster style on the same map.
+    const waitForMap = (timeoutMs) => new Promise((resolve, reject) => {
+      if (map.loaded()) return resolve();
+      let settled = false;
+      const cleanup = () => {
+        clearTimeout(timer);
+        map.off('load', onLoad);
+        map.off('remove', onRemove);
+      };
+      const onLoad = () => {
+        if (settled) return;
+        settled = true; cleanup(); resolve();
+      };
+      const onRemove = () => {
+        if (settled) return;
+        settled = true; cleanup();
+        reject(new Error('Map was closed during loading'));
+      };
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true; cleanup();
+        reject(new Error('Map resources did not finish loading'));
+      }, timeoutMs);
+      map.on('load', onLoad);
+      map.on('remove', onRemove);
     });
+    try {
+      await waitForMap(9000);
+    } catch (vectorError) {
+      console.warn('Glide: vector map stalled; switching to raster fallback', vectorError);
+      status('Monochrome map unavailable. Loading compatible map…');
+      map.setStyle(fallbackMonoRasterStyle(key));
+      await waitForMap(12000);
+    }
     state.ready = true;
     scheduleRouteDraw();
     try { sessionStorage.setItem('laneform.tomtom.key', key); } catch { /* storage disabled */ }
