@@ -2,3 +2,6 @@
 
 /* v0.2: clickable route instructions and explicit foreground GPS preview */
 .guidance{margin-top:18px;border-top:1px solid #3d5458;padding-top:17px}.guidance-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.guidance-head .eyebrow{margin:0 0 12px}.guidance-head span{font-size:10px;color:#a8bdb6}.guidance-steps{display:grid;gap:5px;max-height:240px;overflow:auto;padding-right:4px}.guidance-step{display:flex;flex-direction:column;gap:3px;width:100%;padding:11px;text-align:left;background:#1a2e32;color:#e1eee5;border:1px solid #365056;border-radius:4px}.guidance-step:hover,.guidance-step:focus-visible{border-color:#cff3a8;background:#2d4544}.step-distance{color:#a7bdb3;font-size:10px}.step-label{font-size:12px;line-height:1.4;font-weight:650}.gps-accuracy{font-size:11px;line-height:1.5;color:#a2b5b4;margin:8px 0 0}.secondary.active{border-color:#ccefa1;color:#ccefa1}
+
+/* v0.2.1 - intentionally sparse traffic exceptions and transparent API usage */
+.traffic-note{margin:-8px 0 17px 25px;color:#8fa5a0}.usage{margin:10px 0 0;font-size:10px;color:#8ea8a0;line-height:1.5}

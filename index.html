@@ -13,7 +13,7 @@
 <div id="app">
   <div id="map" aria-label="Bucharest route planning map"></div>
   <header class="topbar">
-    <div class="brand"><span class="logo">↗</span><span>LANEFORM</span><span class="version">LAB / 0.2</span></div>
+    <div class="brand"><span class="logo">↗</span><span>LANEFORM</span><span class="version">LAB / 0.2.1</span></div>
     <span id="connection" class="connection">NOT CONNECTED</span>
   </header>
   <main class="panel">
@@ -21,7 +21,7 @@
     <section id="setup">
       <label for="apiKey">TomTom API key</label>
       <div class="key-entry"><input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="Enter your private key"><button type="button" id="connect" class="secondary">Connect</button></div>
-      <p class="helper">Saved only for this browser tab using sessionStorage. Never committed to GitHub. Restrict your key's domains when published.</p>
+      <p class="helper">Saved only for this browser tab. Map connection is manual to conserve free API requests. Restrict your key's domains before sharing the site.</p>
     </section>
     <section id="planner" hidden>
       <div class="field">
@@ -33,7 +33,8 @@
         <div class="segmented" role="group" aria-label="Choose starting point"><button type="button" id="demoOrigin" class="selected">Răzoare demo</button><button type="button" id="gpsOrigin">My location</button></div>
       </div>
       <button type="button" id="plan" class="primary">Find route <span>↗</span></button>
-      <label class="traffic-toggle"><input id="trafficToggle" type="checkbox" checked> Show live traffic layer</label>
+      <label class="traffic-toggle"><input id="trafficToggle" type="checkbox" checked> Highlight congestion only</label>
+      <p class="helper traffic-note">Normal traffic stays unmarked. Congestion tiles load only after route planning or when you explicitly toggle this layer on.</p>
       <section id="results" hidden aria-label="Route options">
         <div class="rule"></div><p class="eyebrow">ROUTE OPTIONS</p>
         <div id="routeChoices" class="choices"></div>
@@ -48,6 +49,7 @@
       </section>
     </section>
     <p id="message" role="status" aria-live="polite" class="message">Enter your API key to load the map.</p>
+    <p id="usage" class="usage" aria-live="polite">This tab: 0 searches · 0 route calls · map/traffic tiles not counted</p>
     <p class="footer"><span class="status-dot"></span> Experimental route preview — not validated for driving</p>
   </main>
   <div class="map-controls"><button id="locate" type="button" aria-label="Center map on current location" title="Locate">◎</button><button id="fit" type="button" aria-label="Fit selected route on map" title="Show route">⤢</button></div>

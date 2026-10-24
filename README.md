@@ -7,7 +7,7 @@ Personal-use navigation research prototype for Bucharest. **v0.2 is a route plan
 - TomTom interactive dark map, centered on Bucharest
 - Destination lookup using TomTom Search
 - Traffic-aware automobile routes with up to two alternatives, estimated duration and distance
-- Live traffic flow map overlay (where supported)
+- Traffic exceptions only via TomTom `relative-delay` flow tiles (no unnecessary green free-flow markings; coverage varies)
 - Approximate Răzoare test origin, or a single browser GPS fix
 - Mobile-friendly layout and manual route refresh
 - High-contrast route line with casing above traffic tiles and alternate routes
@@ -40,6 +40,19 @@ Open the address Vite prints, typically http://localhost:5173. Enter your own To
 The key is kept only in browser `sessionStorage` for the current tab. **It is not a secret once used by a browser:** it can still be seen in network requests. For deployed use, enable TomTom domain whitelisting for your actual site and monitor API usage. Do not commit keys or send them in messages.
 
 Production caveats: provider quotas/terms apply, and a standalone GitHub Pages site cannot act as a private API proxy. Browser geolocation generally requires HTTPS and permission. iOS may suspend a web app in the background.
+
+## No-budget usage safeguards
+
+- The website never reconnects automatically on page refresh. Your key may be prefilled for the current browser tab, but you must press **Connect**.
+- No extra tile-probe request is sent during connection. MapLibre loads only the actual viewport and does not automatically re-request expired tiles.
+- Raster map tiles are capped at zoom 18; flow tiles at zoom 16.
+- Traffic tiles are **lazy**: they are not fetched when merely connecting. They appear once you plan a route or explicitly opt in, at zoom 12+.
+- The traffic layer uses TomTom's documented `relative-delay` style, which omits free-flow roads. It is not a claim that every unmarked road is congestion-free.
+- Repeated destination searches are reused within the tab for 30 minutes. An identical route is reused for 2 minutes; explicit traffic refreshes are throttled for 2 minutes. New routing calls have a 12-second minimum gap.
+- The UI shows its count of Search and Routing calls in this tab. **Map tile and traffic tile calls are not counted**; actual TomTom billing/quotas must be checked on the developer dashboard.
+- No polling, automated route recalculation, or timer-based traffic refreshes. Optional tile refresh only occurs on an explicit route refresh and at least 5 minutes after the last traffic-tile update.
+- Traffic snapshots can become stale. Refresh deliberately to see newer conditions; the app does not promise real-time continuous navigation.
+- Tile calls may still happen on new zooms, pans, cache misses, reconnects, and browsing sessions. These safeguards limit unnecessary calls, but do not guarantee any fixed monthly allowance.
 
 ## Roadmap
 
