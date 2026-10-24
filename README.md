@@ -185,3 +185,17 @@ The route-preview screen has deliberately abandoned stacked information-card row
 - `src/route-progress.js` is a pure geometry helper. Its split behavior is checked by `scripts/check-route-progress.mjs` in the existing GitHub Actions test pipeline.
 
 This remains an experimental simulator, not live turn-by-turn or verified lane navigation.
+
+## Lane Assist alpha — provider-backed initial integration
+
+This is a first working **data integration**, not yet Glide's full multi-intersection lane-continuity engine.
+
+The routing request already asks for `guidance:{type:'coded'}` using TomTom's Maps SDK for JavaScript. According to TomTom's SDK docs, `calculateRoute` includes `sections.lanes` when supported by the backend, and `getInstructionLanes(route,instruction)` associates a section with the relevant maneuver. **We read those same already-requested route results** and do not issue any additional requests for lane assistance.
+
+The pure normalizer lives in `src/lane-assist.js`. It validates provider-reported directions and any `follow` recommendation. If no actual recommended lane exists or the SDK helper cannot return usable data, we display **no lane diagram** and revert to normal guidance. The UI only shows source-backed lane-arrow recommendations near the upcoming maneuver (within 480 m and before 12 m). It does not infer or claim the driver's present lane, legally permitted lane changes, or which exact lane a turn feeds into.
+
+The Diagnostics drawer exposes `TomTom lane sections: X of Y instructions` for the selected route. This is a coverage diagnostic, not a measure of on-road correctness. Open it after planning routes through Răzoare to see if provider recommendations are present. **TomTom Orbis routing v3 does not provide lanes sections**, so actual coverage depends on which routing backend the active SDK request uses.
+
+Next, we can construct a separate versioned lane-connection graph from OSM tags (`turn:lanes`, `lanes:forward`) and connectivity relations, with field verification for the precise Drumul Sării → Piața Danny Huwe → Bulevardul Geniului corridor. An inferred connection must never be silently treated as verified. The advanced through-intersection path should only appear when the underlying directed lane graph is sufficiently reliable.
+
+Tests: `scripts/check-lane-assist.mjs` checks normalizing, missing data, offsets, and safe fallback. Lane recommendations are for stationary simulation/inspection only until the system is fully validated. Do not use Glide as driving navigation.

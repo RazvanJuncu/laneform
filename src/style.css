@@ -701,3 +701,58 @@ body[data-mode="navigation"] #idleVeil{opacity:0}
 @media(prefers-reduced-motion:reduce){
   .search-sheet{animation:none!important}
 }
+
+/* GLIDE / LANE ASSIST ALPHA
+   Integrated into the maneuver bubble; intentionally absent without
+   TomTom's concrete recommendation. No fabricated lane geometry. */
+.lane-guidance{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  margin-top:17px;
+  padding:13px 0 0;
+  border:0!important;
+  border-top:1px solid rgba(200,212,220,.105)!important;
+  background:none!important;
+}
+.lane-source{
+  font-size:10px;
+  color:#919DA6;
+  font-weight:450;
+  letter-spacing:0;
+}
+.lane-rail{
+  display:flex;
+  align-items:stretch;
+  gap:5px;
+  max-width:100%;
+}
+.lane-cell{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex:1 1 0;
+  min-width:0;
+  max-width:45px;
+  height:40px;
+  border-radius:14px;
+  background:#1B2227;
+  color:#67747D;
+  opacity:.75;
+}
+.lane-cell.recommended{
+  background:#3A444B;
+  color:#EFF3F4;
+  opacity:1;
+}
+.lane-arrow{
+  font-family:Inter,Arial,sans-serif;
+  font-size:26px;
+  font-weight:400;
+  line-height:1;
+}
+@media(max-width:760px){
+  .lane-guidance{margin-top:13px}
+  .lane-cell{height:37px;max-width:42px;border-radius:12px}
+  .lane-arrow{font-size:24px}
+}

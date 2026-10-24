@@ -1,9 +1,10 @@
-import { TomTomConfig } from '@tomtom-org/maps-sdk/core';
+import { TomTomConfig, getInstructionLanes } from '@tomtom-org/maps-sdk/core';
 import { calculateRoute, discoverPlaces } from '@tomtom-org/maps-sdk/services';
 import { Map as MapLibreMap, Marker, LngLatBounds, setWorkerUrl } from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import mapStyle from './glide-map-style.json';
 import { splitPathByDistance } from './route-progress.js';
+import { extractRouteLaneGuidance, upcomingLaneGuidance, LANE_ARROWS } from './lane-assist.js';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 
@@ -29,6 +30,7 @@ const state = {
   searchCache: new Map(), routeSignature: '', routeAt: 0, attemptAt: 0,
   lastSearchAt: 0, recents: [], searchMatches: [],
   calls: { search: 0, route: 0 }, trafficAvailable: false, lastTrafficAt: 0,
+  laneCache: new WeakMap(),
   drawQueued: false, toastTimer: null,
   sim: { active: false, playing: false, follow: true, raf: null,
     lastFrame: 0, lastCamera: 0, marker: null,
@@ -195,6 +197,20 @@ function routeSegments(feature) {
   return [];
 }
 function selectedRoute() { return state.routes?.features?.[state.selected]; }
+function laneRecords(route) {
+  if (!route) return [];
+  if (!state.laneCache.has(route))
+    state.laneCache.set(route, extractRouteLaneGuidance(route, getInstructionLanes));
+  return state.laneCache.get(route);
+}
+function updateLaneCoverage() {
+  const route = selectedRoute();
+  const total = route?.properties?.guidance?.instructions?.length || 0;
+  const covered = laneRecords(route).length;
+  $('laneCoverage').textContent = route
+    ? 'TomTom lane sections: '+covered+' of '+total+' instructions. Provider data only; not field-verified.'
+    : 'Lane data: shown after a route is calculated';
+}
 function clearCanvas() {
   const canvas = $('routeOverlay');
   const ctx = canvas.getContext('2d');
@@ -603,6 +619,7 @@ async function planRoute(force = false, chosenPlace = null) {
     if (!result?.features?.length || !routeSegments(result.features[0]).length)
       throw new Error('No usable road route was returned.');
     state.routes=result;
+    state.laneCache=new WeakMap();
     state.routeSignature=signature;
     state.routeAt=Date.now();
     state.selected=0;
@@ -636,6 +653,7 @@ function renderPreview() {
   if (!route) return;
   const summary=route.properties?.summary || {};
   $('previewDestination').textContent=state.destinationName || 'Destination';
+  updateLaneCoverage();
   $('summaryTime').textContent=minutes(summary.travelTimeInSeconds);
   $('summaryLength').textContent=distance(summary.lengthInMeters);
   const delay=summary.trafficDelayInSeconds || 0;
@@ -714,16 +732,35 @@ function turnLabel(instruction){
   const road=instruction?.nextRoadInfo?.streetName?.text;
   return road ? 'Continue toward '+road : 'Continue along the highlighted route';
 }
-function renderVerifiedLanes(laneData){
-  // This hook is reserved for verified provider/road data only. No fake lane
-  // diagrams are shown. Phone GPS does not identify the current lane.
+function renderLaneAssistance(laneData){
   const panel=$('laneGuidance');
+  // Missing/unreliable provider data? Show ordinary turn guidance instead.
   panel.replaceChildren();
   panel.hidden=true;
-  if(!laneData?.verified||!Array.isArray(laneData.lanes)||!laneData.lanes.length)return;
-  const label=document.createElement('strong');
-  label.textContent=laneData.message||'Upcoming lane guidance';
-  panel.append(label);
+  if(laneData?.source!=='tomtom' || !Array.isArray(laneData.lanes))return;
+  const info=document.createElement('span');
+  info.className='lane-source';
+  info.textContent='Suggested lanes · TomTom';
+  const rail=document.createElement('div');
+  rail.className='lane-rail';
+  rail.setAttribute('aria-label','Recommended lane directions, left to right');
+  for(const lane of laneData.lanes){
+    const cell=document.createElement('div');
+    cell.className='lane-cell'+(lane.recommended?' recommended':'');
+    cell.setAttribute('aria-label',lane.recommended
+      ? 'Suggested lane: '+lane.follow.replaceAll('_',' ').toLowerCase()
+      : 'Other lane');
+    // A single emphasized route-follow arrow; multiple allowed directions
+    // are not claimed as recommendations.
+    const direction=lane.follow || lane.directions[0];
+    const symbol=document.createElement('span');
+    symbol.setAttribute('aria-hidden','true');
+    symbol.className='lane-arrow';
+    symbol.textContent=LANE_ARROWS[direction] || '↑';
+    cell.append(symbol);
+    rail.append(cell);
+  }
+  panel.append(info,rail);
   panel.hidden=false;
 }
 function navCamera(p,immediate=false){
@@ -746,7 +783,8 @@ function navHud(){
   const realLength=summary.lengthInMeters||sim.length;
   const offset=fraction*realLength;
   const instructions=route.properties?.guidance?.instructions||[];
-  const next=instructions.find(x=>Number.isFinite(x.routeOffsetInMeters)&&x.routeOffsetInMeters>offset+12);
+  const nextIndex=instructions.findIndex(x=>Number.isFinite(x.routeOffsetInMeters)&&x.routeOffsetInMeters>offset+12);
+  const next=nextIndex>=0?instructions[nextIndex]:null;
   $('navDistance').textContent=next?distance(next.routeOffsetInMeters-offset):'Arriving';
   $('navInstruction').textContent=next?turnLabel(next):'Approaching your destination';
   $('navArrow').textContent=turnArrow(next);
@@ -756,7 +794,9 @@ function navHud(){
   const expectedArrival=new Date(Date.now()+timeLeft*1000);
   $('navETA').textContent=expectedArrival.toLocaleTimeString('ro-RO',{hour:'2-digit',minute:'2-digit'});
   $('navScrub').value=String(Math.round(fraction*1000));
-  renderVerifiedLanes(null);
+  const records=laneRecords(route);
+  const laneData=upcomingLaneGuidance(records,next,offset,480,nextIndex);
+  renderLaneAssistance(laneData);
 }
 function positionSim(meters,forceCamera=false){
   const sim=state.sim;

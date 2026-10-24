@@ -77,6 +77,16 @@ assert.ok(js.includes('requestDraw(); // update the muted traveled route'),
   'Route progress must be redrawn even when camera follow is off');
 assert.ok(js.includes('revealPreviewFromSearch(searchRect)'),
   'Centered selection must migrate gracefully to bottom preview');
+assert.ok(js.includes("getInstructionLanes") &&
+  js.includes("extractRouteLaneGuidance(route, getInstructionLanes)"),
+  'Lane guidance must come only from the SDK response of the selected route');
+assert.ok(js.includes("upcomingLaneGuidance(records,next,offset,480,nextIndex)"),
+  'Lane guidance must follow the upcoming actual maneuver');
+assert.ok(js.includes("renderLaneAssistance(laneData)"),
+  'Navigation HUD must update conditional lane assistance');
+assert.ok(existing.has('laneCoverage') && css.includes('.lane-rail'),
+  'User needs source coverage diagnostics and contextual lane visualization');
+console.log('Glide lane-assist UI connection checks passed.');
 console.log('Glide v3.3 centered search, ring icons and route trail checks passed.');
 console.log('Glide v3.2 borderless bubbles, location startup and donut marker checks passed.');
 console.log('Glide v3.1 pod, pill dock and weighted-motion checks passed.');
