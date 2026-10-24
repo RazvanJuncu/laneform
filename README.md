@@ -7,10 +7,10 @@ Personal-use navigation research prototype for Bucharest. **v0.2 is a route plan
 - TomTom interactive dark map, centered on Bucharest
 - Destination lookup using TomTom Search
 - Traffic-aware automobile routes with up to two alternatives, estimated duration and distance
-- Traffic exceptions only via TomTom `relative-delay` flow tiles (no unnecessary green free-flow markings; coverage varies)
+- Significant traffic delays only, from TomTom vector `relative-delay` tiles: draw red below 35% and orange below 60% of free-flow speed; normal segments (including green) are never drawn
 - Approximate Răzoare test origin, or a single browser GPS fix
 - Mobile-friendly layout and manual route refresh
-- High-contrast route line with casing above traffic tiles and alternate routes
+- High-contrast route line on an independent screen-space canvas; this remains on top of traffic as the map pans or zooms, with alternative routes
 - Clickable turn instructions with maneuver map focus
 - Foreground GPS following (explicit opt-in, preview only)
 - Client-side TomTom API key entry; no key in Git history
@@ -47,7 +47,7 @@ Production caveats: provider quotas/terms apply, and a standalone GitHub Pages s
 - No extra tile-probe request is sent during connection. MapLibre loads only the actual viewport and does not automatically re-request expired tiles.
 - Raster map tiles are capped at zoom 18; flow tiles at zoom 16.
 - Traffic tiles are **lazy**: they are not fetched when merely connecting. They appear once you plan a route or explicitly opt in, at zoom 12+.
-- The traffic layer uses TomTom's documented `relative-delay` style, which omits free-flow roads. It is not a claim that every unmarked road is congestion-free.
+- The traffic layer uses TomTom's vector `relative-delay` tiles. The client filters speeds to less than 60% of free-flow (severe below 35%). Road closures, if included in the feed, are marked red. An unmarked road does **not** guarantee there is no congestion. Only tiles inside the current viewport are downloaded.
 - Repeated destination searches are reused within the tab for 30 minutes. An identical route is reused for 2 minutes; explicit traffic refreshes are throttled for 2 minutes. New routing calls have a 12-second minimum gap.
 - The UI shows its count of Search and Routing calls in this tab. **Map tile and traffic tile calls are not counted**; actual TomTom billing/quotas must be checked on the developer dashboard.
 - No polling, automated route recalculation, or timer-based traffic refreshes. Optional tile refresh only occurs on an explicit route refresh and at least 5 minutes after the last traffic-tile update.
