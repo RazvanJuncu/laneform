@@ -94,9 +94,11 @@ function attachTomTomKey(raw, key) {
   if (typeof raw !== 'string') return raw;
   try {
     const url = new URL(raw);
-    if (!url.hostname.endsWith('tomtom.com')) return raw;
+    if (url.hostname !== 'tomtom.com' && !url.hostname.endsWith('.tomtom.com')) return raw;
     if (!url.searchParams.has('key')) url.searchParams.set('key', key);
-    return url.toString();
+    // URL.toString() percent-encodes MapLibre template placeholders. Restore
+    // them so {z}/{x}/{y}, {fontstack}, and {range} still get substituted.
+    return url.toString().replace(/%7B([a-zA-Z_][a-zA-Z0-9_-]*)%7D/gi, '{$1}');
   } catch { return raw; }
 }
 async function loadGlideStyle(key) {
