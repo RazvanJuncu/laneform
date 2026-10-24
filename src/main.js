@@ -1,6 +1,6 @@
 import { TomTomConfig } from '@tomtom-org/maps-sdk/core';
 import { calculateRoute, discoverPlaces } from '@tomtom-org/maps-sdk/services';
-import { Map, Marker, LngLatBounds } from 'maplibre-gl';
+import { Map as MapLibreMap, Marker, LngLatBounds } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 
@@ -22,7 +22,7 @@ const state = {
   requestCounts: { search: 0, route: 0 }
 };
 function normalizedQuery(query) {
-  return query.trim().normalize('NFKC').toLocaleLowerCase('ro-RO').replace(/\\s+/g,' ');
+  return query.trim().normalize('NFKC').toLocaleLowerCase('ro-RO').replace(/\s+/g,' ');
 }
 function coordinatesKey(coordinates) {
   return coordinates.map(value => Number(value).toFixed(4)).join(',');
@@ -35,6 +35,8 @@ function updateUsage() {
 }
 function countRequest(type) {
   state.requestCounts[type]++;
+  try { sessionStorage.setItem('laneform.apiCounts', JSON.stringify(state.requestCounts)); }
+  catch { /* browser storage unavailable */ }
   updateUsage();
 }
 
@@ -122,7 +124,7 @@ async function connect() {
         { id: 'laneform-base-layer', type: 'raster', source: 'laneform-base' }
       ]
     };
-    const map = new Map({
+    const map = new MapLibreMap({
       container: 'map', style, center: BUCHAREST, zoom: 12,
       attributionControl: true, maxZoom: 20,
       refreshExpiredTiles: false
@@ -332,6 +334,7 @@ async function planRoute(refresh = false) {
       ' s to avoid excessive requests.');
     return;
   }
+  state.lastRouteAttemptAt = Date.now();
   busy(true);
   status('Finding traffic-aware routes…');
   try {
@@ -356,7 +359,6 @@ async function planRoute(refresh = false) {
       }
     }
     const locations = [start, state.destination];
-    state.lastRouteAttemptAt = Date.now();
     countRequest('route');
     const nextRoutes = await calculateRoute({
       locations, travelMode: 'car', maxAlternatives: 2,
@@ -374,7 +376,8 @@ async function planRoute(refresh = false) {
         .setLngLat(coord).addTo(state.map)
     );
     await renderRoutes();
-    setTrafficOverlay(el('trafficToggle').checked);
+    // Route fitting fires 'zoomend'; request traffic tiles only for the final
+    // viewport, rather than the full initial Bucharest overview.
     if (refresh) refreshTrafficTilesOnDemand();
     status('Traffic-aware route ready. Tap a step to inspect a maneuver.');
   } catch (err) {
@@ -437,4 +440,11 @@ try {
     status('Saved key restored. Press Connect when you want to load map tiles.');
   }
 } catch { /* session storage disabled */ }
+try {
+  const savedCounts = JSON.parse(sessionStorage.getItem('laneform.apiCounts') || 'null');
+  for (const name of ['route', 'search']) {
+    if (Number.isSafeInteger(savedCounts?.[name]) && savedCounts[name] >= 0)
+      state.requestCounts[name] = savedCounts[name];
+  }
+} catch { /* unavailable counts */ }
 updateUsage();
