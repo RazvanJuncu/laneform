@@ -5,6 +5,7 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import mapStyle from './glide-map-style.json';
 import { splitPathByDistance } from './route-progress.js';
 import { extractRouteLaneGuidance, upcomingLaneGuidance, LANE_ARROWS } from './lane-assist.js';
+import { nextManeuverState, arrivalApproachText } from './maneuver-guidance.js';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 
@@ -206,10 +207,24 @@ function laneRecords(route) {
 function updateLaneCoverage() {
   const route = selectedRoute();
   const total = route?.properties?.guidance?.instructions?.length || 0;
+  const raw = route?.properties?.sections?.lanes?.length || 0;
   const covered = laneRecords(route).length;
   $('laneCoverage').textContent = route
-    ? 'TomTom lane sections: '+covered+' of '+total+' instructions. Provider data only; not field-verified.'
+    ? 'TomTom lanes: '+raw+' raw sections · '+covered+' usable maneuvers / '+total+
+      ' instructions. Source data is not independently verified.'
     : 'Lane data: shown after a route is calculated';
+  const preview = $('previewLaneStatus');
+  if (preview) {
+    preview.textContent = route
+      ? (covered > 0
+          ? 'Lane assist available at '+covered+' maneuver'+(covered===1?'':'s')
+          : 'Lane assist unavailable on this route')
+      : '';
+    preview.title = route
+      ? (raw ? raw+' provider sections, '+covered+' valid recommendations.' :
+        'TomTom did not return lane sections for this route. Glide does not invent them.')
+      : '';
+  }
 }
 function clearCanvas() {
   const canvas = $('routeOverlay');
@@ -729,8 +744,13 @@ function turnArrow(instruction){
 }
 function turnLabel(instruction){
   if(instruction?.message)return instruction.message;
-  const road=instruction?.nextRoadInfo?.streetName?.text;
-  return road ? 'Continue toward '+road : 'Continue along the highlighted route';
+  const road=instruction?.street || instruction?.nextRoadInfo?.streetName?.text;
+  const maneuver=String(instruction?.maneuver || '').toUpperCase();
+  let action='Continue';
+  if(maneuver.includes('LEFT'))action='Turn left';
+  else if(maneuver.includes('RIGHT'))action='Turn right';
+  else if(maneuver.includes('ROUNDABOUT'))action='Use the roundabout';
+  return road ? action+' onto '+road : action+' along the route';
 }
 function renderLaneAssistance(laneData){
   const panel=$('laneGuidance');
@@ -783,11 +803,16 @@ function navHud(){
   const realLength=summary.lengthInMeters||sim.length;
   const offset=fraction*realLength;
   const instructions=route.properties?.guidance?.instructions||[];
-  const nextIndex=instructions.findIndex(x=>Number.isFinite(x.routeOffsetInMeters)&&x.routeOffsetInMeters>offset+12);
-  const next=nextIndex>=0?instructions[nextIndex]:null;
-  $('navDistance').textContent=next?distance(next.routeOffsetInMeters-offset):'Arriving';
-  $('navInstruction').textContent=next?turnLabel(next):'Approaching your destination';
-  $('navArrow').textContent=turnArrow(next);
+  const nextState=nextManeuverState(instructions,offset,realLength);
+  const next=nextState.type==='turn' ? nextState.instruction : null;
+  $('navDistance').textContent=distance(nextState.distance);
+  $('navInstruction').textContent=nextState.type==='turn' ? turnLabel(next)
+    : nextState.type==='approach' ? arrivalApproachText(nextState.instruction)
+    : nextState.type==='complete' ? 'Destination reached'
+    : 'Continue toward destination';
+  $('navArrow').textContent=nextState.type==='turn' ? turnArrow(next)
+    : nextState.type==='complete' ? '✓'
+    : nextState.type==='approach' ? '◎' : '↑';
   $('navRemaining').textContent=distance(Math.max(0,realLength-offset));
   const timeLeft=(summary.travelTimeInSeconds||0)*(1-fraction);
   $('navTime').textContent=timeLeft>1?minutes(timeLeft):'0 min';
@@ -795,7 +820,8 @@ function navHud(){
   $('navETA').textContent=expectedArrival.toLocaleTimeString('ro-RO',{hour:'2-digit',minute:'2-digit'});
   $('navScrub').value=String(Math.round(fraction*1000));
   const records=laneRecords(route);
-  const laneData=upcomingLaneGuidance(records,next,offset,480,nextIndex);
+  const laneData=nextState.type==='turn'
+    ? upcomingLaneGuidance(records,next,offset,480,nextState.index) : null;
   renderLaneAssistance(laneData);
 }
 function positionSim(meters,forceCamera=false){

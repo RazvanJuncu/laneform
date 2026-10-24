@@ -756,3 +756,15 @@ body[data-mode="navigation"] #idleVeil{opacity:0}
   .lane-cell{height:37px;max-width:42px;border-radius:12px}
   .lane-arrow{font-size:24px}
 }
+
+/* Explicit but discreet provider coverage: when no lane data is returned,
+   users should not search for an invisible feature in the driving screen. */
+.lane-availability{
+  margin-top:13px;
+  color:#9AA7B0;
+  font-size:11px;
+  line-height:1.35;
+  letter-spacing:0;
+  font-weight:450;
+}
+.lane-availability:empty{display:none}

@@ -80,12 +80,19 @@ assert.ok(js.includes('revealPreviewFromSearch(searchRect)'),
 assert.ok(js.includes("getInstructionLanes") &&
   js.includes("extractRouteLaneGuidance(route, getInstructionLanes)"),
   'Lane guidance must come only from the SDK response of the selected route');
-assert.ok(js.includes("upcomingLaneGuidance(records,next,offset,480,nextIndex)"),
-  'Lane guidance must follow the upcoming actual maneuver');
+assert.ok(js.includes("upcomingLaneGuidance(records,next,offset,480,nextState.index)"),
+  'Lane guidance must track only the actual upcoming turn, not an arrival message');
 assert.ok(js.includes("renderLaneAssistance(laneData)"),
   'Navigation HUD must update conditional lane assistance');
 assert.ok(existing.has('laneCoverage') && css.includes('.lane-rail'),
   'User needs source coverage diagnostics and contextual lane visualization');
+assert.ok(existing.has('previewLaneStatus') &&
+  js.includes("Lane assist unavailable on this route"),
+  'Preview must explicitly explain unavailable lane guidance');
+assert.ok(js.includes("nextManeuverState(instructions,offset,realLength)") &&
+  js.includes("arrivalApproachText(nextState.instruction)"),
+  'Arrival instructions must be guarded by distance to actual destination');
+console.log('Glide arrival regression and visible lane coverage connections passed.');
 console.log('Glide lane-assist UI connection checks passed.');
 console.log('Glide v3.3 centered search, ring icons and route trail checks passed.');
 console.log('Glide v3.2 borderless bubbles, location startup and donut marker checks passed.');

@@ -13,7 +13,7 @@ const ALLOWED_SEPARATORS = new Set([
 
 export function normalizeLaneSection(section) {
   if (!section || !Array.isArray(section.lanes) ||
-      section.lanes.length < 2 || section.lanes.length > 12) return null;
+      section.lanes.length < 1 || section.lanes.length > 12) return null;
   const lanes = section.lanes.map(raw => {
     const directions = Array.isArray(raw?.directions) ?
       raw.directions.filter(dir => ALLOWED_DIRECTIONS.has(dir)) : [];

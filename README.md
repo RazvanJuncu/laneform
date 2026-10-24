@@ -199,3 +199,25 @@ The Diagnostics drawer exposes `TomTom lane sections: X of Y instructions` for t
 Next, we can construct a separate versioned lane-connection graph from OSM tags (`turn:lanes`, `lanes:forward`) and connectivity relations, with field verification for the precise Drumul Sării → Piața Danny Huwe → Bulevardul Geniului corridor. An inferred connection must never be silently treated as verified. The advanced through-intersection path should only appear when the underlying directed lane graph is sufficiently reliable.
 
 Tests: `scripts/check-lane-assist.mjs` checks normalizing, missing data, offsets, and safe fallback. Lane recommendations are for stationary simulation/inspection only until the system is fully validated. Do not use Glide as driving navigation.
+
+## Arrival instruction regression fix and discoverable lane coverage
+
+When TomTom returns an upcoming arrival instruction and there are no other turns
+remaining, the navigation HUD **must not** display a past-tense "you have
+reached your destination" message while kilometres away. Glide now uses
+`src/maneuver-guidance.js` to select the next actionable maneuver, with
+`Continue toward destination` as its long-distance fallback. The last 75 m
+shows "Destination ahead", and the completed state is shown only when route
+progress has actually reached the destination. This is validated by
+`scripts/check-maneuver-guidance.mjs`, including the reported 3.1 km case.
+
+The route-preview pod now displays either **Lane assist available at N
+maneuvers** or **Lane assist unavailable on this route**. The Preferences →
+Technical details breakdown distinguishes raw TomTom lane sections from usable
+recommendations. This matters because some TomTom routing backends and areas
+provide no lane sections: the code won't fabricate lanes to fill the gap.
+Single-lane provider sections are accepted for normalization, although the
+multi-lane intersection model remains a future milestone.
+
+These changes read only the previously requested route. No extra API calls are
+made. Do not use the simulated guidance for real-world driving.
