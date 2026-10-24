@@ -75,3 +75,14 @@ individual maneuver arrows.
 - https://www.openstreetmap.org/copyright
 
 The osm2streets engine is Apache-2.0; OSM data remains ODbL.
+
+
+## Reproducible integration test
+
+Tap **Try example** to load the upstream `tiny_roundabout/input.osm` regression
+fixture bundled with Glide. It requires no OSM API access; only the
+same-origin WebAssembly module, loaded on demand. The lab fits the map to
+the imported lane geometry automatically. The production build also runs a
+Node-based WASM smoke test against this exact real OSM extract, exercising
+`JsStreetNetwork`, lane polygons, and lane markings before deployment.
+Fixture source: `a-b-street/osm2streets/tests/src/tiny_roundabout/input.osm`.

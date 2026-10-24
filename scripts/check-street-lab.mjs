@@ -47,6 +47,13 @@ assert.ok(lab.includes('const lib=await import(/* @vite-ignore */ path)'),
   'WebAssembly engine must be loaded lazily');
 assert.ok(!main.includes("osm2streets_js.js"),
   'Normal route entry point must not directly import the heavy engine');
+assert.ok(html.includes('id="geometryExample"'),'Bundled example button missing');
+assert.ok(lab.includes("const url=import.meta.env.BASE_URL+'lab-example.osm'"),
+  'Built-in test extract should not call OSM or Overpass services');
+assert.ok(lab.includes('boundsOf(data.lanes)'),
+  'Uploaded/sample street geometry needs a map fit to the actual area');
+assert.ok(packageJSON.scripts.build.includes('smoke-osm2streets.mjs'),
+  'The real WASM library must be smoke-tested as part of the build');
 assert.ok(lab.includes('COOLDOWN_MS=30000'));
 assert.ok(lab.includes('MAX_OSM_BYTES'));
 assert.ok(build.includes('osm2streets-js@0.1.4'));

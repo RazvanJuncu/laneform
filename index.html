@@ -153,7 +153,7 @@
     <details class="geometry-lab-details">
       <summary>Street geometry lab <span>Experimental</span></summary>
       <p>Reconstruct actual lane shapes with osm2streets. A geometry preview, not verified lane guidance.</p>
-      <button id="geometryFetch" type="button" class="geometry-action">Inspect map center</button>
+      <div class="geometry-action-row"><button id="geometryFetch" type="button" class="geometry-action">Inspect map center</button><button id="geometryExample" type="button" class="geometry-example">Try example</button></div>
       <label for="geometryUpload" class="geometry-upload">Or import an OSM XML / GeoJSON file</label>
       <input id="geometryUpload" type="file" accept=".osm,.xml,.geojson,.json" aria-label="Import OSM XML or osm2streets GeoJSON">
       <p id="geometryStatus" role="status" aria-live="polite">Runs only when requested. A small OSM area is downloaded and processed locally.</p>

@@ -21,6 +21,24 @@ let lastGeojson=null;
 
 const $=id=>document.getElementById(id);
 function status(text){$('geometryStatus').textContent=text;}
+function boundsOf(lanes){
+  let west=Infinity,south=Infinity,east=-Infinity,north=-Infinity;
+  function walk(coords){
+    if(!Array.isArray(coords))return;
+    if(coords.length>=2&&typeof coords[0]==='number'&&
+      typeof coords[1]==='number' && Number.isFinite(coords[0])&&
+      Number.isFinite(coords[1])){
+      west=Math.min(west,coords[0]);east=Math.max(east,coords[0]);
+      south=Math.min(south,coords[1]);north=Math.max(north,coords[1]);
+      return;
+    }
+    for(const value of coords)walk(value);
+  }
+  for(const feature of lanes.features)walk(feature.geometry?.coordinates);
+  if(![west,south,east,north].every(Number.isFinite)||
+    east-west>1||north-south>1||west>=east||south>=north)return null;
+  return [[west,south],[east,north]];
+}
 function prepareMap(map){
   if(!map?.isStyleLoaded?.())return false;
   for(const id of Object.values(IDs)){
@@ -111,6 +129,13 @@ function activate(map,onModeChange,data,source){
     center:lastCenter,zoom:Math.max(16.5,map.getZoom()),
     pitch:0,bearing:0,duration:750
   });
+  else {
+    const bounds=boundsOf(data.lanes);
+    if(bounds)map.fitBounds(bounds,{
+      padding:{top:100,bottom:125,left:55,right:55},
+      pitch:0,bearing:0,maxZoom:18,duration:750
+    });
+  }
   $('geometryInspectStatus').textContent=
     data.lanes.features.length+' reconstructed lane shapes · '+source;
   status('Ready: '+data.lanes.features.length+
@@ -120,6 +145,7 @@ async function withBusy(action){
   if(busy)return;
   busy=true;
   $('geometryFetch').disabled=true;
+  $('geometryExample').disabled=true;
   $('geometryUpload').disabled=true;
   try{await action();}
   catch(error){
@@ -128,6 +154,7 @@ async function withBusy(action){
   }finally{
     busy=false;
     $('geometryFetch').disabled=false;
+    $('geometryExample').disabled=false;
     $('geometryUpload').disabled=false;
   }
 }
@@ -167,6 +194,18 @@ export function wireGeometryLab(mapGetter,onModeChange){
     const xml=await fetchNearbyXml(lastCenter);
     const result=await processOsm(xml);
     activate(m,onModeChange,result,'osm2streets');
+  }));
+  $('geometryExample').addEventListener('click',()=>withBusy(async()=>{
+    if(document.body.dataset.mode==='navigation')
+      throw Error('Exit the route simulation before inspecting geometry.');
+    status('Loading a bundled osm2streets test intersection…');
+    const url=import.meta.env.BASE_URL+'lab-example.osm';
+    const response=await fetch(url,{credentials:'omit'});
+    if(!response.ok)throw Error('Could not load the bundled example.');
+    const xml=await response.text();
+    lastCenter=null;
+    const result=await processOsm(xml);
+    activate(map(),onModeChange,result,'osm2streets sample');
   }));
   $('geometryUpload').addEventListener('change',event=>withBusy(async()=>{
     const file=event.target.files?.[0];
