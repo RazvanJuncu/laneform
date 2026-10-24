@@ -10,6 +10,7 @@ const wasm=await readFile(resolve('public/vendor/osm2streets_js_bg.wasm'));
 const xml=await readFile(resolve('public/lab-example.osm'));
 const lib=await import(pathToFileURL(js).href);
 await lib.default(wasm);
+console.log('Published JsStreetNetwork wrapper:',String(lib.JsStreetNetwork).slice(0,3000));
 const network=new lib.JsStreetNetwork(xml,'',{
   debug_each_step:false,dual_carriageway_experiment:false,
   sidepath_zipping_experiment:false,inferred_sidewalks:false,
