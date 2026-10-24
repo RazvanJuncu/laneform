@@ -96,3 +96,32 @@ Source style inspiration: MIT-licensed `hyperknot/openfreemap-styles` dark style
 **TomTom is only used** when users explicitly request Search, Routing, or optional traffic tiles. Initial map display, panning, zooming, and route playback do **not** consume TomTom Map Display quota. A key restored from sessionStorage is configured locally without any network call.
 
 If the public vector provider is unavailable, its road geometry may not render; the application should present a useful error rather than claim a complete map. Follow real road signs/markings and never rely on this prototype for driving.
+
+## Glide v0.6 — automotive interface overhaul
+
+This iteration replaces the permanent left-panel application with three explicit UI states:
+
+- **Planning:** a small destination/search surface and origin selector over the full-screen map. TomTom API key and traffic controls live behind the top-right preferences button.
+- **Preview:** a floating bottom sheet containing ETA, route distance, alternative route choices and an **Explore in 3D** action.
+- **Simulated drive:** perspective camera (approx. 59° pitch), camera bearing aligned with the selected route, lower-third simulated position, a prominent next-maneuver HUD and a slim bottom progress strip. Play, pause, scrub and camera follow are available; scrubbing disables follow to avoid excessive tile downloads.
+
+### Cartography and styling
+
+Custom OpenFreeMap vector style uses cold obsidian-blue `#071018`, blue-green land and water, and muted silver-gray roads. Signal lime `#D7F36A` stays reserved for the selected trajectory and primary actions. The old black route casing has been replaced with a soft canvas glow, bright line core and faint inner highlight. Alternative routes are cool-gray and recessive.
+
+### API budget protection
+
+The map and camera animations consume **no TomTom Map Display requests**. OpenFreeMap tile traffic is separate from the TomTom API budget. TomTom Search and Routing are triggered only on deliberate route planning / manual traffic refresh; same-route reuse lasts 2 minutes, place reuse 30 minutes, and route API calls have a 12-second throttle. Route playback never calls TomTom. Optional live congestion overlay remains delayed/lazy.
+
+### Safety and limitations
+
+The immersive drive is **a route simulation, not real-time navigation**. It uses an estimated speed and instructions returned for the selected route, not live GPS, vehicle speed, road signs, or map matching. There is **no automatic rerouting**, validated lane-level positioning, or verified intersection diagram. The lane guidance container is explicitly hidden until verified source data becomes available, so the interface never invents lane directions. Do not operate or rely on this prototype while driving.
+
+### Implementation files
+
+- `index.html` — the three mode-specific surfaces.
+- `src/style.css` — Glide's adaptive automotive design system.
+- `src/main.js` — map, routing, route rendering and the simulation state machine.
+- `src/glide-map-style.json` — locally bundled vector cartography.
+
+The repo and GitHub Pages URL retain the development codename `laneform`. The product brand is Glide.

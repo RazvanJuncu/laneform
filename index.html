@@ -3,110 +3,134 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0B0F12">
+  <meta name="theme-color" content="#071018">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Glide">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="description" content="Glide — calm maps and traffic-aware routing.">
+  <meta name="description" content="Glide — navigation made calm.">
   <title>Glide — Navigation</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650;700;750;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
-<body>
+<body data-mode="planning">
 <div id="app">
-  <div id="map" aria-label="Glide route planning map"></div>
+  <div id="map" role="application" aria-label="Glide map of Bucharest"></div>
+  <canvas id="routeOverlay" aria-hidden="true"></canvas>
+
   <header class="topbar">
-    <div class="brand">
-      <span class="brand-wordmark">glide<span class="brand-stop">.</span></span>
-          </div>
-    <div class="header-right">
-      <span id="connection" class="connection">LOADING MAP</span>
+    <div class="wordmark" aria-label="Glide">glide<span>.</span></div>
+    <div class="top-actions">
+      <span class="map-state" id="mapState"><span class="signal-dot"></span> Map loading</span>
+      <button id="settingsOpen" class="icon-control" aria-label="Map and routing settings" title="Settings" type="button">•••</button>
     </div>
   </header>
-  <main class="panel" id="plannerPanel">
-    <div class="heading"><h1>Plan a route</h1></div>
-    <section id="setup" class="setup">
-      <label for="apiKey">TomTom routing key</label>
-      <div class="key-entry">
-        <input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="TomTom API key" aria-label="TomTom API key">
-        <button type="button" id="connect" class="secondary">Use key</button>
+
+  <section class="planning-sheet surface" id="planningSheet" aria-label="Plan a route">
+    <form id="routeForm">
+      <label class="field-label" for="destination">Destination</label>
+      <div class="search-field">
+        <span class="search-icon" aria-hidden="true">⌕</span>
+        <input id="destination" type="search" placeholder="Where are we going?" autocomplete="street-address" required>
       </div>
-      <p class="helper">Used only for route calculations. No TomTom calls until you plan a journey.</p>
-    </section>
-    <section id="planner" hidden>
-      <div class="field">
-        <label for="destination">DESTINATION</label>
-        <input id="destination" type="search" placeholder="Search a place or address" autocomplete="off">
-      </div>
-      <div class="field">
-        <label>START FROM</label>
-        <div class="segmented" role="group" aria-label="Choose starting point">
-          <button type="button" id="demoOrigin" class="selected">Răzoare demo</button>
-          <button type="button" id="gpsOrigin">My location</button>
+      <div class="origin-row">
+        <span class="origin-kicker">FROM</span>
+        <div class="origin-selector" role="group" aria-label="Route starting point">
+          <button type="button" class="origin-option selected" id="demoOrigin">Răzoare</button>
+          <button type="button" class="origin-option" id="gpsOrigin">My location</button>
         </div>
       </div>
-      <button type="button" id="plan" class="primary">Find route <span aria-hidden="true">↗</span></button>
-      <label class="traffic-toggle">
-        <input id="trafficToggle" type="checkbox" checked>
-        <span>Significant delays only</span>
-        <span class="delay-legend" aria-label="Amber means slow traffic; red means severe traffic">
-          <i class="orange"></i><i class="red"></i>
-        </span>
-      </label>
-      <section id="results" hidden aria-label="Route options">
-        <div class="section-divider"></div>
-        <div class="section-heading">
-          <p class="eyebrow">ROUTE OPTIONS</p>
-          
-        </div>
-        <div id="routeChoices" class="choices"></div>
-        <div id="routeSummary" class="summary" aria-live="polite"></div>
-        <button type="button" id="startWalkthrough" class="primary start-walkthrough">Explore route <span aria-hidden="true">↗</span></button>
-        <div class="route-actions">
-          <button type="button" id="refresh" class="secondary wide">↻ &nbsp; Check traffic again</button>
-          <button type="button" id="followGPS" class="secondary wide">◎ &nbsp; Follow GPS (preview)</button>
-        </div>
-        <p id="gpsAccuracy" class="gps-accuracy">GPS preview works only while the app is open.</p>
-        <details class="guidance">
-          <summary>
-            <span>Turn-by-turn preview</span>
-            <span id="guidanceCount" class="detail-count">—</span>
-          </summary>
-          <div id="guidanceSteps" class="guidance-steps"></div>
-        </details>
-      </section>
-    </section>
-    <div id="message" role="status" aria-live="polite" class="message">Connect your map to begin.</div>
-    <details class="diagnostics">
-      <summary>System details</summary>
-      <p id="usage" class="usage">This tab: 0 searches · 0 route calls · map tiles not counted</p>
-      <p class="helper">Navigation and lane guidance are not validated. Follow road signs and markings.</p>
+      <button type="submit" id="plan" class="primary-action">Find a route <span aria-hidden="true">↗</span></button>
+    </form>
+    <span class="hint-line">Traffic-aware routes · Bucharest preview</span>
+  </section>
+
+  <section class="preview-sheet surface" id="previewSheet" hidden aria-label="Route preview">
+    <div class="preview-top">
+      <div class="preview-title-group">
+        <div class="mini-label">YOUR ROUTE</div>
+        <strong id="previewDestination" class="preview-destination">Destination</strong>
+      </div>
+      <button id="backToPlanning" type="button" class="quiet-button" aria-label="Edit destination">Edit ↗</button>
+    </div>
+    <div class="preview-primary-metrics">
+      <strong id="summaryTime">—</strong>
+      <div class="metric-side">
+        <span id="summaryLength">— km</span>
+        <span id="summaryDelay">Live traffic considered</span>
+      </div>
+    </div>
+    <div id="routeChoices" class="route-options" aria-label="Choose a route"></div>
+    <button id="startPreview" type="button" class="primary-action">
+      Explore in 3D <span aria-hidden="true">↗</span>
+    </button>
+    <div class="preview-utilities">
+      <button type="button" id="recalculate" class="text-control">↻ Refresh traffic</button>
+      <button type="button" id="fit" class="text-control">⤢ Show full route</button>
+    </div>
+  </section>
+
+  <section id="navHUD" class="nav-hud surface" hidden aria-label="Upcoming maneuver in simulation">
+    <div class="nav-eyebrow">
+      <span>SIMULATED DRIVE</span>
+      <span class="sim-dot" aria-hidden="true"></span>
+    </div>
+    <div class="next-maneuver">
+      <span class="maneuver-icon" id="navArrow" aria-hidden="true">↗</span>
+      <div class="maneuver-content">
+        <strong id="navDistance" class="maneuver-distance">—</strong>
+        <div id="navInstruction" class="maneuver-instruction">Preparing your route</div>
+      </div>
+    </div>
+    <div id="laneGuidance" class="lane-guidance" hidden aria-label="Verified lane advice"></div>
+  </section>
+
+  <section id="navBar" class="nav-bar surface" hidden aria-label="Navigation simulation controls">
+    <div class="nav-metrics">
+      <div><strong id="navTime">—</strong><span>REMAINING</span></div>
+      <div><strong id="navRemaining">—</strong><span>DISTANCE</span></div>
+      <div><strong id="navETA">—</strong><span>ARRIVAL*</span></div>
+    </div>
+    <div class="nav-commands">
+      <button type="button" id="navPlay" class="primary-mini">Play</button>
+      <button type="button" id="navFollow" class="utility-mini selected" aria-pressed="true" title="Toggle perspective camera">Follow</button>
+      <button type="button" id="navExit" class="utility-mini">Exit</button>
+    </div>
+    <details class="simulation-details">
+      <summary>Simulation controls</summary>
+      <input type="range" id="navScrub" min="0" max="1000" step="1" value="0" aria-label="Move along the selected route">
+      <div class="sim-note">Accelerated route walkthrough. Not GPS navigation. No automatic rerouting or lane directions.</div>
     </details>
-    <p class="footer"><span class="status-dot"></span>Preview · Not for driving</p>
-  </main>
-  <div class="map-controls">
-    <button id="locate" type="button" aria-label="Center on location" title="Locate">◎</button>
-    <button id="fit" type="button" aria-label="Show entire route" title="Show route">⤢</button>
-  </div>
-  <section id="navHUD" class="nav-hud" aria-label="Simulated route walkthrough" hidden>
-    <div class="nav-hud-kicker">ROUTE WALKTHROUGH <span>SIMULATED</span></div>
-    <div id="navDistance" class="nav-next-distance">—</div>
-    <div id="navInstruction" class="nav-instruction">Upcoming maneuver</div>
-    <div class="nav-hud-footer"><span id="navRemaining">— left</span><span id="navETA">— min</span></div>
   </section>
-  <section id="navControls" class="nav-controls" aria-label="Route walkthrough controls" hidden>
-    <div class="nav-playback-row">
-      <span>Route walkthrough</span>
-      <span class="nav-playback-note">12× simulated · no routing calls</span>
+
+  <button id="recenter" type="button" class="map-fab" title="Center map" aria-label="Center map">◎</button>
+
+  <section id="settingsPanel" class="settings-panel surface" hidden aria-label="Routing settings">
+    <div class="settings-heading">
+      <strong>Preferences</strong>
+      <button id="settingsClose" type="button" class="icon-control" aria-label="Close settings">×</button>
     </div>
-    <input id="navScrub" type="range" min="0" max="1000" step="1" value="0" aria-label="Position along the route">
-    <div class="nav-control-buttons">
-      <button id="navPlayPause" type="button" class="nav-play-button">Play</button>
-      <label class="nav-camera-label"><input id="navFollowCamera" type="checkbox"> Follow camera <small>uses map tiles</small></label>
-      <button id="navExit" type="button" class="nav-exit-button">Exit preview</button>
+    <div class="settings-item">
+      <label class="field-label" for="apiKey">TomTom routing key</label>
+      <div class="key-row">
+        <input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="API key">
+        <button type="button" id="saveKey" class="secondary-action">Save</button>
+      </div>
+      <p class="microcopy">Stored in this browser tab only. Glide's map doesn't use this key.</p>
     </div>
+    <label class="settings-toggle" for="trafficToggle">
+      <span>Show major congestion <small>Only amber and red delays</small></span>
+      <input type="checkbox" id="trafficToggle" checked>
+    </label>
+    <details class="developer-details">
+      <summary>Diagnostics</summary>
+      <p id="usageCounter">0 searches · 0 routes this tab</p>
+      <p>Map tiles are supplied by OpenFreeMap and are not included in these counts.</p>
+    </details>
   </section>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <div class="safety-footnote" id="safetyFootnote">EXPERIMENTAL PREVIEW · NOT FOR ACTIVE DRIVING</div>
 </div>
 <script type="module" src="/src/main.js"></script>
 </body>
