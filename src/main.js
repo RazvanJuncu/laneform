@@ -13,6 +13,7 @@ const ROUTE_MIN_GAP_MS = 12 * 1000;
 const TRAFFIC_REFRESH_MS = 5 * 60 * 1000;
 const SEARCH_TTL_MS = 30 * 60 * 1000;
 const TRAFFIC_MIN_ZOOM = 11;
+const MOTION_MS = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0 : 470;
 const state = {
   map: null, ready: false, routes: null, destination: null, gps: null,
   marker: null, waypointMarkers: [], originMode: 'demo', busy: false,
@@ -20,7 +21,7 @@ const state = {
   placeCache: new Map(), lastRouteSignature: null, lastRouteAt: 0,
   lastRouteAttemptAt: 0, trafficExplicit: false, lastTrafficAt: 0,
   requestCounts: { search: 0, route: 0 },
-  routeCanvas: null, routeDrawScheduled: false
+  routeCanvas: null, routeDrawScheduled: false, lastNativeRouteId: null
 };
 function normalizedQuery(query) {
   return query.trim().normalize('NFKC').toLocaleLowerCase('ro-RO').replace(/\s+/g,' ');
@@ -49,7 +50,7 @@ function busy(value) {
   state.busy = value;
   el('plan').disabled = value;
   el('refresh').disabled = value;
-  el('plan').textContent = value ? 'Calculating…' : 'Find route ↗';
+  el('plan').textContent = value ? 'Planning your route…' : 'Plan journey ↗';
 }
 function time(seconds) { return String(Math.max(1, Math.round(seconds / 60))) + ' min'; }
 function distance(meters) { return meters >= 1000 ? (meters / 1000).toFixed(1) + ' km' : Math.round(meters) + ' m'; }
@@ -90,9 +91,9 @@ function setTrafficOverlay(enabled) {
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: {
         'line-color': ['case',
-          ['==', ['get', 'road_closure'], true], '#f35d5d',
-          ['<', ['to-number', ['get', 'traffic_level'], 1], 0.35], '#ed4246',
-          '#f29b4b'
+          ['==', ['get', 'road_closure'], true], '#E55555',
+          ['<', ['to-number', ['get', 'traffic_level'], 1], 0.35], '#E55555',
+          '#F3A94B'
         ],
         'line-width': ['interpolate', ['linear'], ['zoom'], 12, 2.4, 15, 4, 18, 5.5],
         'line-opacity': 0.86
@@ -141,7 +142,17 @@ async function connect() {
         }
       },
       layers: [
-        { id: 'laneform-base-layer', type: 'raster', source: 'laneform-base' }
+        { id: 'glide-background', type: 'background', paint: { 'background-color': '#0B0F12' } },
+        {
+          id: 'laneform-base-layer', type: 'raster', source: 'laneform-base',
+          paint: {
+            'raster-saturation': -0.72,
+            'raster-contrast': 0.12,
+            'raster-brightness-min': 0.015,
+            'raster-brightness-max': 0.80,
+            'raster-opacity': 0.96
+          }
+        }
       ]
     };
     const map = new MapLibreMap({
@@ -150,6 +161,7 @@ async function connect() {
       refreshExpiredTiles: false
     });
     state.map = map;
+    state.lastNativeRouteId = null;
     prepareRouteCanvas();
     map.on('move', scheduleRouteDraw);
     map.on('resize', scheduleRouteDraw);
@@ -205,7 +217,7 @@ function showGPS(position) {
     } else {
       state.marker.setLngLat(point);
     }
-    state.map.flyTo({ center: point, zoom: 15 });
+    state.map.flyTo({ center: point, zoom: 15, duration: MOTION_MS });
   }
   status('GPS acquired (reported accuracy ±' + Math.round(position.coords.accuracy) + ' m).');
 }
@@ -226,14 +238,56 @@ function setOrigin(mode) {
   else status('Using approximate Răzoare demo start. This is not a verified driving position.');
 }
 function getSelectedRoute() { return state.routes?.features?.[state.selected]; }
+// Routing SDK normally returns a GeoJSON LineString. MultiLineString is
+// supported defensively for future providers, with independent segments.
+function getRouteSegments(route) {
+  const geometry = route?.geometry;
+  if (!geometry) return [];
+  if (geometry.type === 'LineString' &&
+      Array.isArray(geometry.coordinates) && geometry.coordinates.length >= 2)
+    return [geometry.coordinates];
+  if (geometry.type === 'MultiLineString' && Array.isArray(geometry.coordinates))
+    return geometry.coordinates.filter(segment => Array.isArray(segment) && segment.length >= 2);
+  return [];
+}
+function syncNativeRouteLayers() {
+  const map = state.map;
+  if (!map || !state.ready || !state.routes?.features?.length) return;
+  const selected = state.routes.features[state.selected];
+  const coords = getRouteSegments(selected);
+  if (!coords.length) return;
+  const geometry = coords.length === 1
+    ? { type: 'LineString', coordinates: coords[0] }
+    : { type: 'MultiLineString', coordinates: coords };
+  const data = { type: 'Feature', properties: {}, geometry };
+  const source = map.getSource('glide-native-route');
+  if (source) source.setData(data);
+  else map.addSource('glide-native-route', { type: 'geojson', data });
+  if (!map.getLayer('glide-native-casing')) {
+    map.addLayer({
+      id:'glide-native-casing',type:'line',source:'glide-native-route',
+      layout:{'line-cap':'round','line-join':'round'},
+      paint:{'line-color':'#0B0F12','line-width':10,'line-opacity':0.95}
+    });
+    map.addLayer({
+      id:'glide-native-line',type:'line',source:'glide-native-route',
+      layout:{'line-cap':'round','line-join':'round'},
+      paint:{'line-color':'#D7F36A','line-width':6,'line-opacity':1}
+    });
+  }
+  state.lastNativeRouteId = selected.id || state.selected;
+}
 function fitRoute() {
-  const coordinates = getSelectedRoute()?.geometry?.coordinates;
-  if (!coordinates?.length || !state.map) return;
+  const segments = getRouteSegments(getSelectedRoute());
+  if (!segments.length || !state.map) return;
   const bounds = new LngLatBounds();
-  coordinates.forEach((coord) => bounds.extend(coord));
+  segments.forEach(segment => segment.forEach(coord => {
+    if (Array.isArray(coord) && Number.isFinite(coord[0]) && Number.isFinite(coord[1]))
+      bounds.extend(coord);
+  }));
   state.map.fitBounds(bounds, {
-    padding: { top: 100, right: 60, bottom: 100, left: window.innerWidth > 700 ? 455 : 45 },
-    maxZoom: 16, duration: 650
+    padding: { top: 86, right: 70, bottom: 115, left: window.innerWidth > 740 ? 425 : 70 },
+    maxZoom: 16, duration: MOTION_MS
   });
 }
 // Independent screen-space overlay. Does not depend on map style / vector
@@ -275,38 +329,35 @@ function drawRouteLines() {
   if (!state.routes?.features?.length) return;
   const routes = state.routes.features;
   const selected = routes[state.selected];
-  if (selected?.geometry?.type !== 'LineString' ||
-      !Array.isArray(selected.geometry.coordinates) ||
-      selected.geometry.coordinates.length < 2) {
+  if (!getRouteSegments(selected).length) {
     console.warn('Unsupported route geometry:', selected?.geometry);
     return;
   }
   const trace = (route, color, lineWidth, opacity = 1) => {
-    const coordinates = route?.geometry?.coordinates;
-    if (!Array.isArray(coordinates) || coordinates.length < 2) return;
-    ctx.beginPath();
-    let started = false;
-    for (const coord of coordinates) {
-      if (!Array.isArray(coord) || !Number.isFinite(coord[0]) ||
-          !Number.isFinite(coord[1])) continue;
-      const point = map.project(coord);
-      if (!started) { ctx.moveTo(point.x, point.y); started = true; }
-      else ctx.lineTo(point.x, point.y);
-    }
-    if (!started) return;
+    const segments = getRouteSegments(route);
     ctx.strokeStyle = color;
     ctx.lineWidth = lineWidth;
     ctx.globalAlpha = opacity;
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
-    ctx.stroke();
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    for (const coordinates of segments) {
+      ctx.beginPath();
+      let started = false;
+      for (const coord of coordinates) {
+        if (!Array.isArray(coord) || !Number.isFinite(coord[0]) ||
+            !Number.isFinite(coord[1])) continue;
+        const point = map.project(coord);
+        if (!started) { ctx.moveTo(point.x, point.y); started = true; }
+        else ctx.lineTo(point.x, point.y);
+      }
+      if (started) ctx.stroke();
+    }
     ctx.globalAlpha = 1;
   };
   routes.forEach((route, index) => {
-    if (index !== state.selected) trace(route, '#becbc7', 4, 0.65);
+    if (index !== state.selected) trace(route, '#7C8791', 4, 0.66);
   });
-  trace(selected, '#152526', 13, 0.96);
-  trace(selected, '#d8f4a7', 7);
+  trace(selected, '#0B0F12', 13, 0.99);
+  trace(selected, '#D7F36A', 7);
 }
 function instructionLabel(instruction) {
   if (instruction?.message) return instruction.message;
@@ -330,7 +381,7 @@ function renderGuidance() {
     label.className = 'step-label'; label.textContent = instructionLabel(instruction);
     row.append(at,label);
     row.addEventListener('click', () => state.map?.flyTo({
-      center: instruction.maneuverPoint, zoom: 16.5, duration: 650
+      center: instruction.maneuverPoint, zoom: 16.5, duration: MOTION_MS
     }));
     container.append(row);
   }
@@ -343,6 +394,7 @@ function renderGuidance() {
 async function selectRoute(index) {
   if (!state.routes?.features?.[index]) return;
   state.selected = index;
+  syncNativeRouteLayers();
   scheduleRouteDraw();
   renderGuidance();
   document.querySelectorAll('.route-choice').forEach((button, n) => {
@@ -442,10 +494,11 @@ async function planRoute(refresh = false) {
     state.lastRouteSignature = signature;
     state.lastRouteAt = Date.now();
     state.selected = 0;
+    syncNativeRouteLayers();
     scheduleRouteDraw();
     state.waypointMarkers.forEach((marker) => marker.remove());
     state.waypointMarkers = locations.map((coord, index) =>
-      new Marker({ color: index === 0 ? '#d8f4a7' : '#f0f6ed' })
+      new Marker({ color: index === 0 ? '#D7F36A' : '#D8E0E7' })
         .setLngLat(coord).addTo(state.map)
     );
     await renderRoutes();
@@ -483,7 +536,7 @@ function toggleGPSFollow() {
         const dot=document.createElement('div');dot.className='gps-dot';
         state.marker=new Marker({element:dot}).setLngLat(point).addTo(state.map);
       } else state.marker.setLngLat(point);
-      state.map.easeTo({center:point,zoom:Math.max(state.map.getZoom(),15),duration:450});
+      state.map.easeTo({center:point,zoom:Math.max(state.map.getZoom(),15),duration:MOTION_MS});
       el('gpsAccuracy').textContent='GPS accuracy ±'+Math.round(position.coords.accuracy)+' m';
     },
     (error) => { stopGPSFollow(); status('GPS unavailable: '+error.message,true); },

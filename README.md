@@ -1,6 +1,6 @@
-# Laneform — Bucharest Navigation Lab
+# Glide — Navigation, refined.
 
-Personal-use navigation research prototype for Bucharest. **v0.2 is a route planner with a foreground GPS preview, NOT validated driving navigation.**
+Glide is the visual brand. The GitHub repository and developer identifiers remain named Laneform to preserve deployment URLs and stored preferences. Personal-use navigation research prototype for Bucharest. **v0.2 is a route planner with a foreground GPS preview, NOT validated driving navigation.**
 
 ## Features
 
@@ -70,3 +70,13 @@ Production caveats: provider quotas/terms apply, and a standalone GitHub Pages s
 - https://docs.tomtom.com/maps-sdk-js/guides/map/routes
 - https://docs.tomtom.com/maps-sdk-js/examples/traffic-flow
 - https://docs.tomtom.com/maps-sdk-js/api-reference/types/services.CostModel.html
+
+## Glide visual identity (v0.3)
+
+- Core: Obsidian `#0B0F12`, Deep Graphite `#12181D`, Gunmetal `#1C252B`, Steel Mist `#8C98A4`, Soft Silver `#D8E0E7`.
+- Signature route / selected action: Signal Lime `#D7F36A`. Slowdown `#F3A94B`, severe or closure `#E55555`.
+- Interface type: Inter Variable (Google Fonts with system-font fallback); large tabular ETA and legible touch targets.
+- Motion: responsive, restrained 180–320 ms for controls/panels; route-camera ease around 470 ms; reduced-motion setting respected.
+- Simplify details behind disclosure. Map and route are the hierarchy; minimal logo is typographic pending final user-supplied artwork.
+- The initial dark map treatment applies low-saturation, reduced-brightness filters to TomTom's existing raster tiles. It is not yet a fully custom vector style with separately controlled roads and labels, which will be a later iteration.
+- Independent canvas route overlay retains a native MapLibre route layer as a fallback. Actual route rendering must be tested with the user's TomTom key.

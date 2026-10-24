@@ -3,55 +3,100 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#10191b">
+  <meta name="theme-color" content="#0B0F12">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Glide">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="description" content="Laneform: a personal Bucharest traffic-aware route planning prototype.">
-  <title>Laneform — Bucharest Navigation Lab</title>
+  <meta name="description" content="Glide — a calmer way to navigate. Traffic-aware route planning, thoughtfully simplified.">
+  <title>Glide — Navigation, refined.</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650;700;750;800&display=swap" rel="stylesheet">
 </head>
 <body>
 <div id="app">
-  <div id="map" aria-label="Bucharest route planning map"></div>
+  <div id="map" aria-label="Glide route planning map"></div>
+  <div class="map-veil" aria-hidden="true"></div>
   <header class="topbar">
-    <div class="brand"><span class="logo">↗</span><span>LANEFORM</span><span class="version">LAB / 0.2.2</span></div>
-    <span id="connection" class="connection">NOT CONNECTED</span>
+    <div class="brand">
+      <span class="brand-wordmark">glide<span class="brand-stop">.</span></span>
+      <span class="brand-divider"></span>
+      <span class="brand-caption">NAVIGATION, REFINED</span>
+    </div>
+    <div class="header-right">
+      <span id="connection" class="connection">DISCONNECTED</span>
+      <span class="version">PREVIEW / 0.3</span>
+    </div>
   </header>
-  <main class="panel">
-    <div class="heading"><p class="eyebrow">BUCHAREST / NAVIGATION LAB</p><h1>Where to?</h1><p class="sub">Traffic-aware routes. Explore each upcoming maneuver.</p></div>
-    <section id="setup">
-      <label for="apiKey">TomTom API key</label>
-      <div class="key-entry"><input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="Enter your private key"><button type="button" id="connect" class="secondary">Connect</button></div>
-      <p class="helper">Saved only for this browser tab. Map connection is manual to conserve free API requests. Restrict your key's domains before sharing the site.</p>
+  <main class="panel" id="plannerPanel">
+    <div class="heading">
+      <p class="eyebrow">YOUR JOURNEY</p>
+      <h1>Where to?</h1>
+      <p class="sub">Less noise. More clarity.</p>
+    </div>
+    <section id="setup" class="setup">
+      <label for="apiKey">Connect your map</label>
+      <div class="key-entry">
+        <input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="TomTom API key" aria-label="TomTom API key">
+        <button type="button" id="connect" class="secondary">Connect</button>
+      </div>
+      <p class="helper">Your key stays in this browser tab. Connection is manual to avoid unnecessary map requests.</p>
     </section>
     <section id="planner" hidden>
       <div class="field">
-        <label for="destination">Destination <small>BUCHAREST, ROMANIA</small></label>
-        <input id="destination" type="search" placeholder="e.g. Piața Victoriei" autocomplete="off">
+        <label for="destination">DESTINATION</label>
+        <input id="destination" type="search" placeholder="Search a place or address" autocomplete="off">
       </div>
       <div class="field">
-        <label>Starting point</label>
-        <div class="segmented" role="group" aria-label="Choose starting point"><button type="button" id="demoOrigin" class="selected">Răzoare demo</button><button type="button" id="gpsOrigin">My location</button></div>
+        <label>START FROM</label>
+        <div class="segmented" role="group" aria-label="Choose starting point">
+          <button type="button" id="demoOrigin" class="selected">Răzoare demo</button>
+          <button type="button" id="gpsOrigin">My location</button>
+        </div>
       </div>
-      <button type="button" id="plan" class="primary">Find route <span>↗</span></button>
-      <label class="traffic-toggle"><input id="trafficToggle" type="checkbox" checked> Show significant delays <span class="delay-legend"><i class="orange"></i>Slow <i class="red"></i>Severe</span></label>
+      <button type="button" id="plan" class="primary">Plan journey <span aria-hidden="true">↗</span></button>
+      <label class="traffic-toggle">
+        <input id="trafficToggle" type="checkbox" checked>
+        <span>Significant delays only</span>
+        <span class="delay-legend" aria-label="Amber means slow traffic; red means severe traffic">
+          <i class="orange"></i><i class="red"></i>
+        </span>
+      </label>
       <section id="results" hidden aria-label="Route options">
-        <div class="rule"></div><p class="eyebrow">ROUTE OPTIONS</p>
+        <div class="section-divider"></div>
+        <div class="section-heading">
+          <p class="eyebrow">ROUTE OPTIONS</p>
+          <span class="section-subhead">Traffic considered</span>
+        </div>
         <div id="routeChoices" class="choices"></div>
-        <div id="routeSummary" class="summary"></div>
-        <button type="button" id="refresh" class="secondary wide">Recalculate with current traffic</button>
-        <button type="button" id="followGPS" class="secondary wide">Follow GPS (preview)</button>
-        <p id="gpsAccuracy" class="gps-accuracy">GPS following works only while the webpage is active.</p>
-        <section class="guidance">
-          <div class="guidance-head"><p class="eyebrow">TURN-BY-TURN PREVIEW</p><span id="guidanceCount">—</span></div>
+        <div id="routeSummary" class="summary" aria-live="polite"></div>
+        <div class="route-actions">
+          <button type="button" id="refresh" class="secondary wide">↻ &nbsp; Check traffic again</button>
+          <button type="button" id="followGPS" class="secondary wide">◎ &nbsp; Follow GPS (preview)</button>
+        </div>
+        <p id="gpsAccuracy" class="gps-accuracy">GPS preview works only while the app is open.</p>
+        <details class="guidance">
+          <summary>
+            <span>Turn-by-turn preview</span>
+            <span id="guidanceCount" class="detail-count">—</span>
+          </summary>
           <div id="guidanceSteps" class="guidance-steps"></div>
-        </section>
+        </details>
       </section>
     </section>
-    <p id="message" role="status" aria-live="polite" class="message">Enter your API key to load the map.</p>
-    <p id="usage" class="usage" aria-live="polite">This tab: 0 searches · 0 route calls · map/traffic tiles not counted</p>
-    <p class="footer"><span class="status-dot"></span> Experimental route preview — not validated for driving</p>
+    <div id="message" role="status" aria-live="polite" class="message">Connect your map to begin.</div>
+    <details class="diagnostics">
+      <summary>System details</summary>
+      <p id="usage" class="usage">This tab: 0 searches · 0 route calls · map tiles not counted</p>
+      <p class="helper">Navigation and lane guidance are not validated. Follow road signs and markings.</p>
+    </details>
+    <p class="footer"><span class="status-dot"></span>Experimental route planning · Not for active driving</p>
   </main>
-  <div class="map-controls"><button id="locate" type="button" aria-label="Center map on current location" title="Locate">◎</button><button id="fit" type="button" aria-label="Fit selected route on map" title="Show route">⤢</button></div>
+  <div class="map-controls">
+    <button id="locate" type="button" aria-label="Center on location" title="Locate">◎</button>
+    <button id="fit" type="button" aria-label="Show entire route" title="Show route">⤢</button>
+  </div>
+  <div class="map-credit">GLIDE / BUCHAREST PREVIEW</div>
 </div>
 <script type="module" src="/src/main.js"></script>
 </body>
