@@ -69,10 +69,9 @@ function baseTileURL(key) {
   return 'https://api.tomtom.com/maps/orbis/display/raster/tile/{z}/{x}/{y}' +
     '?apiVersion=2&style=street-dark&tileSize=256&key=' + encodeURIComponent(key);
 }
-// The vector tiles expose traffic_level = current speed / free-flow speed.
-// Only significant delays are drawn; free-flow roads never become green lines.
-// True neutral monochrome map, not a brown-tinted raster.
-function fallbackMonoRasterStyle(key) {
+// Direct, reliable grayscale rendering of the previously working TomTom
+// street-dark raster tiles. No external vector style/sprite/glyph requests.
+function glideMonoStyle(key) {
   return {
     version: 8,
     sources: {
@@ -93,42 +92,6 @@ function fallbackMonoRasterStyle(key) {
       }
     ]
   };
-}
-function attachTomTomKey(raw, key) {
-  if (typeof raw !== 'string') return raw;
-  try {
-    const url = new URL(raw);
-    if (url.hostname !== 'tomtom.com' && !url.hostname.endsWith('.tomtom.com')) return raw;
-    if (!url.searchParams.has('key')) url.searchParams.set('key', key);
-    // URL.toString() percent-encodes MapLibre template placeholders. Restore
-    // them so {z}/{x}/{y}, {fontstack}, and {range} still get substituted.
-    return url.toString().replace(/%7B([a-zA-Z_][a-zA-Z0-9_-]*)%7D/gi, '{$1}');
-  } catch { return raw; }
-}
-async function loadGlideStyle(key) {
-  // Official Orbis Assets mono-dark vector style. One style request when the
-  // user explicitly connects; no automatic reconnect or style polling.
-  const url = 'https://api.tomtom.com/maps/orbis/assets/styles/0.*/style' +
-    '?apiVersion=1&map=basic_mono-dark&key=' + encodeURIComponent(key);
-  try {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Assets API returned ' + response.status);
-    const style = await response.json();
-    if (style.version !== 8 || !Array.isArray(style.layers) || !style.sources)
-      throw new Error('Unexpected style structure');
-    for (const source of Object.values(style.sources)) {
-      if (source?.url) source.url = attachTomTomKey(source.url, key);
-      if (Array.isArray(source?.tiles))
-        source.tiles = source.tiles.map(url => attachTomTomKey(url, key));
-    }
-    if (style.sprite) style.sprite = attachTomTomKey(style.sprite, key);
-    if (style.glyphs) style.glyphs = attachTomTomKey(style.glyphs, key);
-    console.info('Glide: mono-dark vector map style enabled');
-    return style;
-  } catch (error) {
-    console.warn('Glide: mono vector style not available; using neutral raster:', error);
-    return fallbackMonoRasterStyle(key);
-  }
 }
 function trafficTileURL(key) {
   return 'https://api.tomtom.com/traffic/map/4/tile/flow/relative-delay/{z}/{x}/{y}.pbf' +
@@ -189,7 +152,7 @@ async function connect() {
   const key = el('apiKey').value.trim();
   if (!key) { status('Enter your TomTom API key.', true); return; }
   el('connect').disabled = true;
-  status('Connecting to map (manual, to conserve API requests)…');
+  status('Preparing map…');
   state.ready = false;
   try {
     TomTomConfig.instance.put({ apiKey: key, language: 'en-GB' });
@@ -200,7 +163,7 @@ async function connect() {
     if (state.map) state.map.remove();
     if (state.routeCanvas) state.routeCanvas.remove();
     state.routeCanvas = null;
-    const style = await loadGlideStyle(key);
+    const style = glideMonoStyle(key);
     const map = new MapLibreMap({
       container: 'map', style, center: BUCHAREST, zoom: 12,
       attributionControl: true, maxZoom: 20,
@@ -215,41 +178,39 @@ async function connect() {
       setTrafficOverlay(el('trafficToggle').checked);
       scheduleRouteDraw();
     });
-    // If vector sources fail to finish, do not leave the user on a gray map.
-    // Retry with the known working grayscale raster style on the same map.
-    const waitForMap = (timeoutMs) => new Promise((resolve, reject) => {
-      if (map.loaded()) return resolve();
-      let settled = false;
-      const cleanup = () => {
+    // 'load' waits for *all* necessary tiles. On slow/mobile networks it may
+    // never fire, despite the style already being operational. Unlock the
+    // planner at 'style.load'; map tiles arrive progressively thereafter.
+    await new Promise((resolve, reject) => {
+      if (map.getSource('glide-mono-raster')) return resolve();
+      let done = false;
+      const finish = (error) => {
+        if (done) return;
+        done = true;
         clearTimeout(timer);
-        map.off('load', onLoad);
+        map.off('style.load', onStyle);
         map.off('remove', onRemove);
+        if (error) reject(error); else resolve();
       };
-      const onLoad = () => {
-        if (settled) return;
-        settled = true; cleanup(); resolve();
-      };
-      const onRemove = () => {
-        if (settled) return;
-        settled = true; cleanup();
-        reject(new Error('Map was closed during loading'));
-      };
-      const timer = setTimeout(() => {
-        if (settled) return;
-        settled = true; cleanup();
-        reject(new Error('Map resources did not finish loading'));
-      }, timeoutMs);
-      map.on('load', onLoad);
+      const onStyle = () => finish();
+      const onRemove = () => finish(new Error('Map was closed before startup'));
+      const timer = setTimeout(
+        () => finish(new Error('Map renderer did not initialize. Check browser WebGL support.')),
+        4500
+      );
+      map.on('style.load', onStyle);
       map.on('remove', onRemove);
     });
-    try {
-      await waitForMap(9000);
-    } catch (vectorError) {
-      console.warn('Glide: vector map stalled; switching to raster fallback', vectorError);
-      status('Monochrome map unavailable. Loading compatible map…');
-      map.setStyle(fallbackMonoRasterStyle(key));
-      await waitForMap(12000);
-    }
+    // A failed remote tile should not block routing or the entire UI.
+    // Surface a clear, non-blocking message instead of waiting 25 seconds.
+    let lastTileErrorAt = 0;
+    map.on('error', (event) => {
+      const message = event?.error?.message || 'unknown tile error';
+      console.warn('Glide map request issue:', event?.error || event);
+      if (Date.now() - lastTileErrorAt < 6000) return;
+      lastTileErrorAt = Date.now();
+      status('Some map tiles could not load. Check TomTom Map Display permission and the browser console.', true);
+    });
     state.ready = true;
     scheduleRouteDraw();
     try { sessionStorage.setItem('laneform.tomtom.key', key); } catch { /* storage disabled */ }
