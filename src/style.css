@@ -3,16 +3,16 @@
    All animations are functional. No bounce, faux glass glare or decorative HUD. */
 :root {
   color-scheme: dark;
-  --night: #071018;
-  --midnight: #0B1721;
-  --surface: #101D26;
-  --raised: #172630;
+  --night: #050607;
+  --midnight: #0D1114;
+  --surface: #0D1114;
+  --raised: #171C20;
   --line: rgba(152,171,180,.18);
-  --silver: #D6E0E5;
-  --muted: #8B9CA6;
-  --signal: #D7F36A;
-  --orange: #F3A94B;
-  --red: #E55555;
+  --silver: #E7EAED;
+  --muted: #7F8C96;
+  --signal: #C7CDD2;
+  --orange: #A87A45;
+  --red: #8D4747;
   --ease: cubic-bezier(.22,1,.36,1);
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: var(--night);
@@ -105,7 +105,7 @@ input[type="search"]::-webkit-search-cancel-button { filter: grayscale(1) invert
 .origin-option {
   min-height: 37px; border: 0; border-radius: 5px;
   padding: 0 12px; font-size: 12px; font-weight: 600;
-  background: transparent; color: #9FB1BA;
+  background: transparent; color: #A1ABB2;
   transition: background .2s var(--ease),color .2s var(--ease);
 }
 .origin-option.selected { color: var(--silver); background: #293A43; }
@@ -117,7 +117,7 @@ input[type="search"]::-webkit-search-cancel-button { filter: grayscale(1) invert
   font-size: 14px; font-weight: 750; letter-spacing: -.012em;
   transition: background .2s var(--ease), transform .18s var(--ease);
 }
-.primary-action:hover { background: #E1F890; }
+.primary-action:hover { background: #E7EAED; }
 .primary-action:active { transform: translateY(1px); }
 .primary-action span { font-size: 19px; font-weight: 400; }
 .hint-line {
@@ -138,7 +138,7 @@ input[type="search"]::-webkit-search-cancel-button { filter: grayscale(1) invert
   max-width: 375px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
 }
 .quiet-button,.text-control {
-  color: #ACBDC7; border: 0; background: transparent; font-size: 12px;
+  color: #AEB8BF; border: 0; background: transparent; font-size: 12px;
   min-height: 35px; border-radius: 6px; padding: 3px 8px;
   transition: color .2s var(--ease),background .2s var(--ease);
 }
@@ -193,7 +193,7 @@ input[type="search"]::-webkit-search-cancel-button { filter: grayscale(1) invert
   min-height: 43px; border-radius: 7px; font-size: 12px; font-weight: 650;
   padding: 0 17px;
 }
-.primary-mini { background: var(--signal); border: 1px solid var(--signal); color: #071018; min-width: 85px; }
+.primary-mini { background: var(--signal); border: 1px solid var(--signal); color: #050607; min-width: 85px; }
 .utility-mini { background: #182A34; border: 1px solid #374D57; color: var(--silver); }
 .utility-mini.selected { border-color: #8DA56C; }
 .nav-commands button:last-child { margin-left: auto; }
@@ -310,4 +310,91 @@ body[data-mode="navigation"] .safety-footnote { display: none; }
 @keyframes mobile-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) {
   *,*::before,*::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+/* GLIDE · SATIN OBSIDIAN — 2026
+   New brand: engineered wordmark, platinum route, no colored spotlight. */
+:root{--night:#050607;--midnight:#0D1114;--surface:#0D1114;--raised:#171C20;
+--line:rgba(194,205,213,.11);--silver:#E7EAED;--muted:#7F8C96;--signal:#C7CDD2;
+--orange:#A87A45;--red:#8D4747;--ease:cubic-bezier(.22,1,.36,1)}
+#map{background:var(--night)}
+.surface{background:rgba(13,17,20,.95);border:1px solid rgba(199,205,210,.12);
+  border-radius:10px;box-shadow:0 16px 36px rgba(0,0,0,.13)}
+.topbar{background:linear-gradient(180deg,rgba(5,6,7,.82),transparent 96%);height:62px}
+.wordmark{display:inline-flex;align-items:center;min-width:124px;text-decoration:none}
+.wordmark img{display:block;width:129px;height:auto;max-height:24px;object-fit:contain;object-position:left center}
+.icon-control{border-color:rgba(194,205,213,.10);background:rgba(14,20,24,.81);color:#C7CDD2}
+.icon-control:hover{background:#1D252A;border-color:rgba(194,205,213,.30)}
+.settings-dots{font-size:22px;letter-spacing:2px;transform:translateY(-5px)}
+.map-state{font-size:10px;font-weight:500;letter-spacing:.05em;color:#839097}
+.map-state .signal-dot,.map-state.ready .signal-dot{background:#87929B;width:4px;height:4px}
+.planning-sheet{width:340px;padding:18px;top:78px;left:18px}
+.planning-sheet .search-field{background:#171C20;border-color:rgba(194,205,213,.19)}
+.search-field input{font-size:14px}
+.search-field:focus-within{border-color:#8998A2}
+.field-label,.origin-kicker,.mini-label,.nav-eyebrow{letter-spacing:.035em;font-weight:550;text-transform:none}
+.origin-selector{background:#080B0D}
+.origin-option.selected{background:#252D33}
+.primary-action{background:#D9DEE2;border-color:#D9DEE2;color:#12171A;
+  font-weight:650;border-radius:7px;min-height:46px;box-shadow:none}
+.primary-action:hover{background:#F0F2F4}
+.primary-action:active{transform:none}
+.preview-sheet{width:min(475px,calc(100vw - 40px));padding:19px 21px 13px;
+  bottom:25px;background:rgba(13,17,20,.96)}
+.preview-top{align-items:center}
+.preview-title-group{min-width:0}
+.preview-destination{font-size:14px;font-weight:550;letter-spacing:-.01em;max-width:355px}
+.preview-body{display:flex;align-items:center;justify-content:space-between;
+  gap:16px;padding-top:12px;padding-bottom:12px}
+.preview-primary-metrics{margin:0;gap:11px;align-items:center}
+.preview-primary-metrics>strong{font-size:31px;font-weight:600;letter-spacing:-.045em}
+.metric-side{font-size:10px;gap:2px}
+.preview-action{width:auto;min-height:43px;padding:0 16px;min-width:115px;font-size:12px}
+.preview-action span{font-size:16px}
+.alternatives-disclosure{border-top:1px solid var(--line);margin-top:1px}
+.alternatives-disclosure>summary{list-style:none;display:flex;align-items:center;gap:7px;
+  min-height:36px;color:#849099;font-size:11px;font-weight:500;cursor:pointer}
+.alternatives-disclosure>summary::-webkit-details-marker{display:none}
+.alternatives-disclosure>summary:after{content:"⌄";margin-left:auto;font-size:15px;line-height:1}
+.alternatives-disclosure[open]>summary:after{content:"⌃"}
+#routeAlternativeCount{color:#647078}
+.route-options{margin:0 0 9px;gap:5px}
+.route-option{background:#151B1F;border-color:rgba(199,205,210,.12);min-height:42px;color:#8A959E}
+.route-option strong{color:#C1C8CD}
+.route-option.selected{background:#20272C;border-color:#8B959D;color:#D5DBDE}
+.route-option.selected strong{color:#F0F2F3}
+.preview-utilities{border-top:1px solid var(--line);margin:0 -3px -5px;padding-top:3px}
+.text-control,.quiet-button{color:#818E97;font-size:11px}
+.text-control:hover,.quiet-button:hover{background:#1A2228;color:#D5DBDE}
+.nav-hud{width:min(340px,calc(100vw - 44px));padding:18px 20px 20px}
+.nav-eyebrow{color:#919BA3;letter-spacing:.075em}
+.sim-dot{background:#BFC7CC;width:4px;height:4px}
+.maneuver-icon{color:#E7EAED;font-weight:400}
+.maneuver-distance{font-weight:600;font-size:34px}
+.maneuver-instruction{font-weight:450;color:#C2CAD0}
+.nav-bar{width:min(560px,calc(100vw - 44px));padding:16px 18px}
+.nav-metrics strong{font-size:20px;font-weight:550}
+.nav-metrics span{color:#7E8A93;letter-spacing:.075em}
+.primary-mini{background:#D9DEE2;border-color:#D9DEE2;color:#0D1114}
+.utility-mini{background:#181F24;border-color:#333F46;color:#C7CDD2}
+.utility-mini.selected{border-color:#818B93}
+.map-fab{background:rgba(13,17,20,.93);color:#CBD2D6;border-color:rgba(194,205,213,.18)}
+.map-fab:hover{background:#242B31}
+.settings-panel{background:rgba(13,17,20,.97)}
+.settings-toggle input,.simulation-details input{accent-color:#BFC8CE}
+.toast{background:#171D22;color:#DCE1E4;border-color:#515D65}
+.safety-footnote{color:#6B7780;letter-spacing:.055em}
+body[data-mode="preview"] .map-fab{bottom:245px}
+body[data-mode="navigation"] .map-fab{bottom:200px}
+@media(max-width:760px){
+.topbar{height:57px}
+.wordmark img{width:121px;max-height:22px}
+.planning-sheet{top:auto;left:10px;right:10px;width:auto;padding:17px}
+.preview-sheet{bottom:calc(12px + env(safe-area-inset-bottom));padding:16px;max-width:none}
+.preview-destination{max-width:min(68vw,300px)}
+.preview-body{gap:9px}
+.preview-primary-metrics>strong{font-size:28px}
+.preview-action{min-width:99px;padding:0 11px}
+body[data-mode="preview"] .map-fab{bottom:calc(215px + env(safe-area-inset-bottom))}
+body[data-mode="navigation"] .map-fab{bottom:calc(205px + env(safe-area-inset-bottom))}
 }

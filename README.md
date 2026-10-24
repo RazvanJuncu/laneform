@@ -125,3 +125,17 @@ The immersive drive is **a route simulation, not real-time navigation**. It uses
 - `src/glide-map-style.json` — locally bundled vector cartography.
 
 The repo and GitHub Pages URL retain the development codename `laneform`. The product brand is Glide.
+
+## Glide luxury direction — Satin Obsidian (locked for v0.7)
+
+The brand follows the supplied custom GLIDE wordmark, rendered by a lightweight manually traced SVG (`glide-wordmark.svg`). The source artwork remains unchanged, while the SVG is an approximate UI derivative.
+
+- Piano black `#050607`, obsidian charcoal `#0D1114`, graphite `#171C20`, satin silver `#C7CDD2` and platinum `#E7EAED`.
+- No lime CTA or green brand coloring. The selected route has a 4.7 px platinum core and a minimal 7.5 px translucent halo; route alternatives fade into subdued steel gray.
+- The vector map uses neutral silver roads, very dark water and graphite land, with modest label contrast. Muted red / amber congestion exceptions are opt-in from settings and require significant slowdowns.
+- The compact preview card prioritizes destination, ETA and Preview. Alternative routes are available inside a collapsed disclosure, rather than three permanent large buttons.
+- Inter remains the legible driving UI font. Less bold, less visual chrome and fewer repeated headings. Motion is damped and purposeful.
+- Navigation mode remains a **simulation**, with no automatic rerouting or verified lane diagrams. Live driving use is not supported.
+- Routing/Search calls are still user-initiated with short-term in-tab caches and request throttles. OpenFreeMap provides the base map.
+
+The wordmark's geometry—not an oversized glow or bright accent—should define the brand identity.

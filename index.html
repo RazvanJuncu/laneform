@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#071018">
+  <meta name="theme-color" content="#050607">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Glide">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -19,10 +19,10 @@
   <canvas id="routeOverlay" aria-hidden="true"></canvas>
 
   <header class="topbar">
-    <div class="wordmark" aria-label="Glide">glide<span>.</span></div>
+    <a class="wordmark" href="./" aria-label="Glide home" title="Glide"><img src="./glide-wordmark.svg" alt="GLIDE" width="130" height="20"></a>
     <div class="top-actions">
-      <span class="map-state" id="mapState"><span class="signal-dot"></span> Map loading</span>
-      <button id="settingsOpen" class="icon-control" aria-label="Map and routing settings" title="Settings" type="button">•••</button>
+      <span class="map-state" id="mapState"><span class="signal-dot"></span><span class="map-state-label">Map loading</span></span>
+      <button id="settingsOpen" class="icon-control" aria-label="Preferences" title="Preferences" type="button"><span class="settings-dots" aria-hidden="true">···</span></button>
     </div>
   </header>
 
@@ -42,37 +42,42 @@
       </div>
       <button type="submit" id="plan" class="primary-action">Find a route <span aria-hidden="true">↗</span></button>
     </form>
-    <span class="hint-line">Traffic-aware routes · Bucharest preview</span>
+    
   </section>
 
   <section class="preview-sheet surface" id="previewSheet" hidden aria-label="Route preview">
     <div class="preview-top">
       <div class="preview-title-group">
-        <div class="mini-label">YOUR ROUTE</div>
+        
         <strong id="previewDestination" class="preview-destination">Destination</strong>
       </div>
       <button id="backToPlanning" type="button" class="quiet-button" aria-label="Edit destination">Edit ↗</button>
     </div>
-    <div class="preview-primary-metrics">
-      <strong id="summaryTime">—</strong>
-      <div class="metric-side">
-        <span id="summaryLength">— km</span>
-        <span id="summaryDelay">Live traffic considered</span>
+    <div class="preview-body">
+      <div class="preview-primary-metrics">
+        <strong id="summaryTime">—</strong>
+        <div class="metric-side">
+          <span id="summaryLength">— km</span>
+          <span id="summaryDelay">Live traffic included</span>
+        </div>
       </div>
+      <button id="startPreview" type="button" class="primary-action preview-action">
+        Preview <span aria-hidden="true">↗</span>
+      </button>
     </div>
-    <div id="routeChoices" class="route-options" aria-label="Choose a route"></div>
-    <button id="startPreview" type="button" class="primary-action">
-      Explore in 3D <span aria-hidden="true">↗</span>
-    </button>
+    <details id="alternativesDetails" class="alternatives-disclosure">
+      <summary>Other routes <span id="routeAlternativeCount" aria-label="Number of routes"></span></summary>
+      <div id="routeChoices" class="route-options" aria-label="Choose a route"></div>
+    </details>
     <div class="preview-utilities">
-      <button type="button" id="recalculate" class="text-control">↻ Refresh traffic</button>
-      <button type="button" id="fit" class="text-control">⤢ Show full route</button>
+      <button type="button" id="recalculate" class="text-control">Update traffic</button>
+      <button type="button" id="fit" class="text-control">View full route</button>
     </div>
   </section>
 
   <section id="navHUD" class="nav-hud surface" hidden aria-label="Upcoming maneuver in simulation">
     <div class="nav-eyebrow">
-      <span>SIMULATED DRIVE</span>
+      <span>ROUTE PREVIEW</span>
       <span class="sim-dot" aria-hidden="true"></span>
     </div>
     <div class="next-maneuver">
@@ -87,9 +92,9 @@
 
   <section id="navBar" class="nav-bar surface" hidden aria-label="Navigation simulation controls">
     <div class="nav-metrics">
-      <div><strong id="navTime">—</strong><span>REMAINING</span></div>
+      <div><strong id="navTime">—</strong><span>TIME LEFT</span></div>
       <div><strong id="navRemaining">—</strong><span>DISTANCE</span></div>
-      <div><strong id="navETA">—</strong><span>ARRIVAL*</span></div>
+      <div><strong id="navETA">—</strong><span>ARRIVAL</span></div>
     </div>
     <div class="nav-commands">
       <button type="button" id="navPlay" class="primary-mini">Play</button>
@@ -119,8 +124,8 @@
       <p class="microcopy">Stored in this browser tab only. Glide's map doesn't use this key.</p>
     </div>
     <label class="settings-toggle" for="trafficToggle">
-      <span>Show major congestion <small>Only amber and red delays</small></span>
-      <input type="checkbox" id="trafficToggle" checked>
+      <span>Traffic exceptions <small>Show significant slowdowns</small></span>
+      <input type="checkbox" id="trafficToggle">
     </label>
     <details class="developer-details">
       <summary>Diagnostics</summary>
@@ -130,7 +135,7 @@
   </section>
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-  <div class="safety-footnote" id="safetyFootnote">EXPERIMENTAL PREVIEW · NOT FOR ACTIVE DRIVING</div>
+  <div class="safety-footnote" id="safetyFootnote">PREVIEW SYSTEM · NOT FOR DRIVING</div>
 </div>
 <script type="module" src="/src/main.js"></script>
 </body>

@@ -11,7 +11,8 @@ setWorkerUrl(workerUrl);
 const $ = id => document.getElementById(id);
 const BUCHAREST = [26.1025, 44.4397];
 const DEMO_ORIGIN = [26.061, 44.429]; // Approximate, not lane-verified.
-const SIGNAL = '#D7F36A';
+const SIGNAL = '#E7EAED';
+const ROUTE_HALO = '#AEBAC4';
 const ROUTE_TTL = 120000;
 const SEARCH_TTL = 1800000;
 const REQUEST_GAP = 12000;
@@ -112,7 +113,7 @@ function initMap() {
   map.on('style.load', () => {
     state.mapReady = true;
     $('mapState').classList.add('ready');
-    $('mapState').lastChild.textContent = ' Map ready';
+    $('mapState').querySelector('.map-state-label').textContent = 'Ready';
     requestDraw();
   });
   map.on('move', requestDraw);
@@ -180,14 +181,14 @@ function drawRoutes() {
     ctx.restore();
   };
   state.routes.features.forEach((route, i) => {
-    if (i !== state.selected) stroke(route, '#8AA0AD', 3.6, .42);
+    if (i !== state.selected) stroke(route, '#66747E', 2.4, .36);
   });
   const feature = selectedRoute();
   if (!feature) return;
-  // Glow replaces the old thick black outline; the sharp core remains legible.
-  stroke(feature, SIGNAL, 11, .23, 14);
-  stroke(feature, SIGNAL, 6.2, .99);
-  stroke(feature, '#F4FFD4', 1.6, .58);
+  // Satin-platinum guidance: a precise line with very restrained diffuse
+  // light. No oversized bloom, neon accent or opaque black casing.
+  stroke(feature, ROUTE_HALO, 7.5, .14, 5);
+  stroke(feature, SIGNAL, state.mode === 'navigation' ? 5.4 : 4.7, .99);
 }
 function fitRoute() {
   if (!state.map || !selectedRoute()) return;
@@ -220,8 +221,8 @@ function refreshMarkers() {
   state.routeMarkers = [];
   if (!state.routes) return;
   const start = origin();
-  if (start) state.routeMarkers.push(new Marker({color:'#D7F36A',scale:.72}).setLngLat(start).addTo(state.map));
-  if (state.destination) state.routeMarkers.push(new Marker({color:'#D6E0E5',scale:.82}).setLngLat(state.destination).addTo(state.map));
+  if (start) state.routeMarkers.push(new Marker({color:'#BFC8CE',scale:.72}).setLngLat(start).addTo(state.map));
+  if (state.destination) state.routeMarkers.push(new Marker({color:'#F0F2F3',scale:.82}).setLngLat(state.destination).addTo(state.map));
 }
 function trafficUrl() {
   return 'https://api.tomtom.com/traffic/map/4/tile/flow/relative-delay/{z}/{x}/{y}.pbf?key='
@@ -240,16 +241,16 @@ function updateTrafficVisibility() {
         id: layerId, source: sourceId, 'source-layer': 'Traffic flow', type:'line',
         filter:['any',
           ['==',['get','road_closure'],true],
-          ['all',['has','traffic_level'],['<',['to-number',['get','traffic_level'],1],.60]]
+          ['all',['has','traffic_level'],['<',['to-number',['get','traffic_level'],1],.50]]
         ],
         layout:{'line-cap':'round','line-join':'round'},
         paint:{
           'line-color':['case',
-            ['==',['get','road_closure'],true],'#E55555',
-            ['<',['to-number',['get','traffic_level'],1],.35],'#E55555',
-            '#F3A94B'],
+            ['==',['get','road_closure'],true],'#8D4747',
+            ['<',['to-number',['get','traffic_level'],1],.28],'#8D4747',
+            '#A87A45'],
           'line-width':['interpolate',['linear'],['zoom'],12,2.1,16,4.3],
-          'line-opacity':.84
+          'line-opacity':.70
         }
       });
       state.trafficAvailable = true;
@@ -358,15 +359,18 @@ function renderPreview() {
   $('summaryTime').textContent=minutes(summary.travelTimeInSeconds);
   $('summaryLength').textContent=distance(summary.lengthInMeters);
   const delay=summary.trafficDelayInSeconds || 0;
-  $('summaryDelay').textContent=delay>40?minutes(delay)+' traffic delay':'Live traffic included';
+  $('summaryDelay').textContent=delay>40?minutes(delay)+' delay':'Traffic-aware';
   const target=$('routeChoices');
   target.replaceChildren();
+  $('routeAlternativeCount').textContent =
+    state.routes.features.length > 1 ? String(state.routes.features.length - 1) : '';
+  $('alternativesDetails').hidden = state.routes.features.length <= 1;
   state.routes.features.forEach((r,index)=>{
     const button=document.createElement('button');
     button.type='button';
     button.className='route-option'+(index===state.selected?' selected':'');
     const label=document.createElement('span');
-    label.textContent=index===0?'Best route':'Option '+(index+1);
+    label.textContent=index===0?'Recommended':'Alternative '+index;
     const duration=document.createElement('strong');
     duration.textContent=minutes(r.properties?.summary?.travelTimeInSeconds);
     button.append(label,duration);
