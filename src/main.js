@@ -6,6 +6,8 @@ import mapStyle from './glide-map-style.json';
 import { splitPathByDistance } from './route-progress.js';
 import { extractRouteLaneGuidance, upcomingLaneGuidance, LANE_ARROWS } from './lane-assist.js';
 import { nextManeuverState, arrivalApproachText } from './maneuver-guidance.js';
+import { fetchOsmLaneWays } from './osm-lane-source.js';
+import { deriveOsmLaneRecords } from './osm-lane-geometry.js';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 
@@ -32,6 +34,8 @@ const state = {
   lastSearchAt: 0, recents: [], searchMatches: [],
   calls: { search: 0, route: 0 }, trafficAvailable: false, lastTrafficAt: 0,
   laneCache: new WeakMap(),
+  osmCache: new WeakMap(),
+  osmWays: [], osmStatus: 'not-checked', osmRequestId: 0, osmChecked: 0,
   drawQueued: false, toastTimer: null,
   sim: { active: false, playing: false, follow: true, raf: null,
     lastFrame: 0, lastCamera: 0, marker: null,
@@ -198,33 +202,83 @@ function routeSegments(feature) {
   return [];
 }
 function selectedRoute() { return state.routes?.features?.[state.selected]; }
-function laneRecords(route) {
+function tomtomLaneRecords(route) {
   if (!route) return [];
   if (!state.laneCache.has(route))
     state.laneCache.set(route, extractRouteLaneGuidance(route, getInstructionLanes));
   return state.laneCache.get(route);
 }
+function osmLaneRecords(route) {
+  if (!route || !state.osmWays.length) return [];
+  if (!state.osmCache.has(route))
+    state.osmCache.set(route, deriveOsmLaneRecords(route,state.osmWays));
+  return state.osmCache.get(route);
+}
+function laneRecords(route) {
+  // Explicit provider recommendation outranks inferred OSM arrow markings.
+  // We do not combine arrows or promote OSM markings into "verified" lanes.
+  const tomtom=tomtomLaneRecords(route);
+  const provider=new Set(tomtom.map(record=>record.index));
+  return [...tomtom,...osmLaneRecords(route).filter(record=>!provider.has(record.index))];
+}
 function updateLaneCoverage() {
-  const route = selectedRoute();
-  const total = route?.properties?.guidance?.instructions?.length || 0;
-  const raw = route?.properties?.sections?.lanes?.length || 0;
-  const covered = laneRecords(route).length;
-  $('laneCoverage').textContent = route
-    ? 'TomTom lanes: '+raw+' raw sections · '+covered+' usable maneuvers / '+total+
-      ' instructions. Source data is not independently verified.'
-    : 'Lane data: shown after a route is calculated';
-  const preview = $('previewLaneStatus');
+  const route=selectedRoute();
+  const raw=route?.properties?.sections?.lanes?.length || 0;
+  const total=route?.properties?.guidance?.instructions?.length || 0;
+  const tomtom=tomtomLaneRecords(route).length;
+  const osm=osmLaneRecords(route).length;
+  const status=state.osmStatus;
+  const statusMessage= status==='checking'?' · checking OSM markings…'
+    : status==='unavailable'?' · OSM lookup unavailable'
+    : status==='rate-limited'?' · OSM lookup deferred'
+    : status==='no-maneuvers'?' · no lane-searchable turns'
+    : status==='ready'?' · OSM scan complete':'';
+  $('laneCoverage').textContent=route
+    ? 'TomTom: '+tomtom+'/'+total+' instructions ('+raw+' raw sections). '+
+      'OpenStreetMap: '+osm+' mapped turn-lane matches.'+statusMessage+
+      ' OSM markings are not validated lane continuity.'
+    : 'Lane sources: shown after a route is calculated';
+  const preview=$('previewLaneStatus');
   if (preview) {
-    preview.textContent = route
-      ? (covered > 0
-          ? 'Lane assist available at '+covered+' maneuver'+(covered===1?'':'s')
-          : 'Lane assist unavailable on this route')
-      : '';
-    preview.title = route
-      ? (raw ? raw+' provider sections, '+covered+' valid recommendations.' :
-        'TomTom did not return lane sections for this route. Glide does not invent them.')
+    preview.textContent=!route?''
+      : tomtom||osm
+        ? 'Lane data · '+tomtom+' TomTom · '+osm+' OSM mapped'+(status==='checking'?' · checking…':'')
+        : status==='checking'?'Checking OpenStreetMap lane markings…'
+        : status==='ready'?'No mapped lane guidance on this route'
+        : status==='unavailable'?'Lane data unavailable · OSM lookup failed'
+        : status==='rate-limited'?'Lane data unavailable · lookup deferred'
+        : 'No TomTom lane data · OSM not checked';
+    preview.title=route
+      ? 'OSM labels reflect road markings only, not verified lane connections. '+
+        'Source: TomTom route guidance + OpenStreetMap/Overpass.'
       : '';
   }
+}
+function startOsmLaneLookup() {
+  const route=selectedRoute();
+  if(!route)return;
+  const requestId=++state.osmRequestId;
+  state.osmWays=[];state.osmCache=new WeakMap();
+  state.osmStatus='checking';state.osmChecked=0;
+  updateLaneCoverage();
+  const signature=state.routeSignature;
+  // ONE public OSM request for relevant maneuver approaches after a deliberate
+  // route calculation. No extra TomTom calls, no map-move polling.
+  void fetchOsmLaneWays(route,signature).then(result=>{
+    if(requestId!==state.osmRequestId)return;
+    state.osmStatus=result.status;
+    state.osmChecked=result.checked;
+    state.osmWays=result.ways;
+    state.osmCache=new WeakMap();
+    updateLaneCoverage();
+    if(state.mode==='navigation')navHud();
+  }).catch(error=>{
+    if(requestId!==state.osmRequestId)return;
+    console.warn('Optional OSM lane lookup unavailable:',error);
+    state.osmStatus='unavailable';
+    state.osmWays=[];state.osmCache=new WeakMap();
+    updateLaneCoverage();
+  });
 }
 function clearCanvas() {
   const canvas = $('routeOverlay');
@@ -635,6 +689,7 @@ async function planRoute(force = false, chosenPlace = null) {
       throw new Error('No usable road route was returned.');
     state.routes=result;
     state.laneCache=new WeakMap();
+    state.osmCache=new WeakMap();
     state.routeSignature=signature;
     state.routeAt=Date.now();
     state.selected=0;
@@ -651,6 +706,7 @@ async function planRoute(force = false, chosenPlace = null) {
     overview();
     revealPreviewFromSearch(searchRect);
     updateTrafficVisibility();
+    startOsmLaneLookup();
   } catch (error) {
     console.error('Glide routing:',error);
     toast('Route unavailable: '+(error.message||'check routing access'),true);
@@ -757,19 +813,23 @@ function renderLaneAssistance(laneData){
   // Missing/unreliable provider data? Show ordinary turn guidance instead.
   panel.replaceChildren();
   panel.hidden=true;
-  if(laneData?.source!=='tomtom' || !Array.isArray(laneData.lanes))return;
+  if(!['tomtom','osm'].includes(laneData?.source) || !Array.isArray(laneData.lanes))return;
   const info=document.createElement('span');
   info.className='lane-source';
-  info.textContent='Suggested lanes · TomTom';
+  info.textContent=laneData.source==='osm'
+    ? 'Mapped turn arrows · OSM (unverified)'
+    : 'Suggested lanes · TomTom';
   const rail=document.createElement('div');
   rail.className='lane-rail';
   rail.setAttribute('aria-label','Recommended lane directions, left to right');
   for(const lane of laneData.lanes){
     const cell=document.createElement('div');
-    cell.className='lane-cell'+(lane.recommended?' recommended':'');
+    cell.className='lane-cell'+(lane.recommended?' recommended':'')+
+      (laneData.source==='osm'?' osm-markings':'');
     cell.setAttribute('aria-label',lane.recommended
-      ? 'Suggested lane: '+lane.follow.replaceAll('_',' ').toLowerCase()
-      : 'Other lane');
+      ? (laneData.source==='osm'?'Mapped arrow matching turn: ':'Suggested lane: ')+
+        lane.follow.replaceAll('_',' ').toLowerCase()
+      : 'Other marked lane');
     // A single emphasized route-follow arrow; multiple allowed directions
     // are not claimed as recommendations.
     const direction=lane.follow || lane.directions[0];

@@ -93,6 +93,17 @@ assert.ok(js.includes("nextManeuverState(instructions,offset,realLength)") &&
   js.includes("arrivalApproachText(nextState.instruction)"),
   'Arrival instructions must be guarded by distance to actual destination');
 console.log('Glide arrival regression and visible lane coverage connections passed.');
+assert.ok(js.includes('startOsmLaneLookup();') &&
+  js.includes("fetchOsmLaneWays(route,signature)") &&
+  js.includes("osmLaneRecords(route)") &&
+  js.includes("provider.has(record.index)"),
+  'Lane assist must combine source-aware OSM markings with prioritized TomTom recommendations');
+assert.ok(js.includes("laneData.source==='osm'") &&
+  js.includes('Mapped turn arrows'),
+  'OSM markings must be labeled as unverified');
+assert.ok(html.includes('public OpenStreetMap Overpass API'),
+  'Users must be told that maneuver coordinates are sent to Overpass');
+console.log('Glide multi-source lane integration and privacy checks passed.');
 console.log('Glide lane-assist UI connection checks passed.');
 console.log('Glide v3.3 centered search, ring icons and route trail checks passed.');
 console.log('Glide v3.2 borderless bubbles, location startup and donut marker checks passed.');

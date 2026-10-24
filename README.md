@@ -221,3 +221,16 @@ multi-lane intersection model remains a future milestone.
 
 These changes read only the previously requested route. No extra API calls are
 made. Do not use the simulated guidance for real-world driving.
+
+## Multi-source Lane Intelligence — TomTom + OpenStreetMap alpha
+
+**Purpose:** The first Bucharest route test returned 0 of 14 TomTom lane sections, despite several complex intersections. Lane assistance no longer relies on a single provider.
+
+- **TomTom:** Guided routes are still authoritative for *where to go*, and the SDK's `getInstructionLanes` supplies recommended lanes wherever the routing backend returns lane sections.
+- **OpenStreetMap:** After the user deliberately calculates a route, a single small, bounded **Overpass** query collects `turn:lanes`, `turn:lanes:forward` and `turn:lanes:backward` from road segments near up to 16 upcoming maneuvers. Geometry is matched to the actual approach within 9 m and 22° before any arrows can be shown. Direction-dependent tags, oneway direction, unknown markings, roundabout ambiguity and competing parallel roads are handled conservatively.
+- **Precedence:** Genuine TomTom *recommendations* take priority over OSM turn markings. OSM arrows are labeled **Mapped turn arrows · OSM (unverified)**. They show mapped road paint for the desired direction; they are **not** verified lane-to-lane transitions or proof of legal lane access. Unknown/mismatched data remains hidden.
+- **Coverage:** The route preview and Preferences show separate TomTom and OSM matches. Public Overpass downtime or missing mapping is shown plainly. Never replace a missing result with fabricated lanes.
+- **Privacy / budget:** One query per newly calculated route after route planning, limited to 16 maneuver neighborhoods, cached for 20 minutes per route in memory and globally throttled to one request per 30 seconds. The request sends nearby maneuver coordinates to `overpass-api.de` but never sends the TomTom key. No additional TomTom calls and no lookup while panning, scrubbing, or simulating. Public Overpass is shared, best-effort and may time out.
+- **Testing:** `scripts/check-osm-lanes.mjs` exercises geometry matching, left/right directions, oneway backward tagging, ambiguity rejection and no-data fallback. A green build **does not verify real OSM coverage or live Overpass availability**.
+
+**Next step:** The actual distinctive Glide feature is a field-checked directed lane graph across Piața Danny Huwe/Răzoare and other selected complex junctions. OSM `type=connectivity` relations, aerial imagery and on-site road markings can help construct that graph, but they must be reconciled manually when incomplete or contradictory. Ordinary GPS does not determine the current traffic lane. Until independently verified, never present *mapped arrows* as confirmed intersection lane-continuity guidance. This prototype is not for actual driving.

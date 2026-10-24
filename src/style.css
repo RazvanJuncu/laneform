@@ -768,3 +768,9 @@ body[data-mode="navigation"] #idleVeil{opacity:0}
   font-weight:450;
 }
 .lane-availability:empty{display:none}
+
+/* Secondary OSM markings have a quieter, source-distinct treatment. */
+.lane-cell.osm-markings{background:#1A2228;opacity:.72}
+.lane-cell.osm-markings.recommended{background:#303D45;opacity:1;color:#DCE5EB}
+.lane-source{font-size:10px;color:#9AA9B3}
+.lane-availability{min-height:14px}
