@@ -139,3 +139,19 @@ The brand follows the supplied custom GLIDE wordmark, rendered by a lightweight 
 - Routing/Search calls are still user-initiated with short-term in-tab caches and request throttles. OpenFreeMap provides the base map.
 
 The wordmark's geometry—not an oversized glow or bright accent—should define the brand identity.
+
+## Interface v3 — Quiet Cockpit
+
+Glide's UI now uses four separate modes: **Idle**, **Search**, **Preview**, and **Simulated Navigation**.
+
+- **Idle:** the map and GLIDE logo remain dominant, with a single `Where to?` entry control at the bottom. No permanent origin selection or planning form.
+- **Search:** a context-aware sheet opens; use the single search field and press Search/Enter to retrieve genuine TomTom place matches. A result selection immediately calculates a route. No network requests are triggered by typing or opening the sheet. Up to five recently routed places are stored only in browser-session storage.
+- **Origin:** defaults to clearly identified `Răzoare · demo`. If location permission has already been granted, opening search can reuse device location. New permission requires choosing `Use my location`. A pending GPS fix blocks routing rather than silently using outdated positioning.
+- **Preview:** destination and ETA sit in a small bottom sheet with one action. Route alternatives are collapsed and can be revealed when necessary.
+- **Simulation:** perspective route camera, maneuver guidance and a restrained metrics bar. It remains **a simulation**, not live navigation, and is not approved for driving.
+
+### Request budget and developer checks
+
+Typing, local recent-place filtering, map movement and route playback do not issue TomTom Routing or Search requests. Destination search is explicitly submitted, uses a 30-minute in-memory cache and an 8-second repeat-request guard. A route is requested only when a returned/previous destination is selected, or through manual traffic refresh, with the prior 2-minute route cache and 12-second routing throttle. Search and route counters are retained for the browser tab. The base map continues using OpenFreeMap, not TomTom Map Display.
+
+The repository includes `scripts/check-ui.mjs` structural tests, and the GitHub Pages workflow runs these checks before building. They cannot replace interactive testing with a user-owned TomTom key.

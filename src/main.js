@@ -16,14 +16,17 @@ const ROUTE_HALO = '#AEBAC4';
 const ROUTE_TTL = 120000;
 const SEARCH_TTL = 1800000;
 const REQUEST_GAP = 12000;
+const SEARCH_GAP = 8000;
+const RECENT_LIMIT = 5;
 const isReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const MOTION = isReducedMotion ? 0 : 520;
 const state = {
-  map: null, mapReady: false, mode: 'planning',
+  map: null, mapReady: false, mode: 'idle',
   key: '', query: '', destinationName: '', destination: null,
-  originMode: 'demo', gps: null, gpsMarker: null,
+  originMode: 'demo', gps: null, gpsAt: 0, gpsMarker: null, originRequestId: 0,
   routes: null, selected: 0, busy: false, routeMarkers: [],
   searchCache: new Map(), routeSignature: '', routeAt: 0, attemptAt: 0,
+  lastSearchAt: 0, recents: [], searchMatches: [],
   calls: { search: 0, route: 0 }, trafficAvailable: false, lastTrafficAt: 0,
   drawQueued: false, toastTimer: null,
   sim: { active: false, playing: false, follow: true, raf: null,
@@ -43,7 +46,8 @@ function uiBusy(value) {
   state.busy = value;
   $('plan').disabled = value;
   $('recalculate').disabled = value;
-  $('plan').firstChild.textContent = value ? 'Calculating… ' : 'Find a route ';
+  $('plan').textContent = value ? 'Working…' : 'Search';
+  if (value) $('searchFeedback').textContent = 'Finding your route…';
 }
 function distance(meters) {
   const safe = Math.max(0, Number(meters) || 0);
@@ -68,6 +72,11 @@ function initKey() {
     const saved = sessionStorage.getItem('laneform.tomtom.key');
     if (saved) { state.key = saved; $('apiKey').value = saved; }
     const count = JSON.parse(sessionStorage.getItem('glide.callCounts') || 'null');
+    const recent = JSON.parse(sessionStorage.getItem('glide.recentDestinations') || '[]');
+    if (Array.isArray(recent)) state.recents = recent.filter(item =>
+      typeof item?.name === 'string' && Array.isArray(item.position) &&
+      item.position.length === 2 && item.position.every(Number.isFinite)
+    ).slice(0, RECENT_LIMIT);
     for (const type of ['search', 'route']) {
       if (Number.isSafeInteger(count?.[type]) && count[type] >= 0) state.calls[type] = count[type];
     }
@@ -91,13 +100,18 @@ function showSettings() {
 function setMode(mode) {
   state.mode = mode;
   document.body.dataset.mode = mode;
-  $('planningSheet').hidden = mode !== 'planning';
+  $('idlePrompt').hidden = mode !== 'idle';
+  $('searchSheet').hidden = mode !== 'search';
   $('previewSheet').hidden = mode !== 'preview';
   $('navHUD').hidden = mode !== 'navigation';
   $('navBar').hidden = mode !== 'navigation';
   $('settingsPanel').hidden = true;
-  $('recenter').title = mode === 'navigation' ? 'Follow simulated vehicle' : 'Fit map';
+  $('recenter').title = mode === 'navigation' ? 'Follow simulated vehicle' : 'Recenter map';
   if (mode !== 'navigation') $('laneGuidance').hidden = true;
+  state.routeMarkers.forEach(marker => {
+    marker.getElement().style.display = mode === 'preview' ? '' : 'none';
+  });
+  requestDraw();
 }
 
 // Map: user-visible cartography is supplied by OpenFreeMap / OSM, not TomTom.
@@ -158,7 +172,7 @@ function drawRoutes() {
   if (!ctx) return;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, width, height);
-  if (!state.routes || state.mode === 'planning') return;
+  if (!state.routes || (state.mode !== 'preview' && state.mode !== 'navigation')) return;
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
 
   const stroke = (feature, color, strokeWidth, opacity, blur = 0) => {
@@ -223,6 +237,9 @@ function refreshMarkers() {
   const start = origin();
   if (start) state.routeMarkers.push(new Marker({color:'#BFC8CE',scale:.72}).setLngLat(start).addTo(state.map));
   if (state.destination) state.routeMarkers.push(new Marker({color:'#F0F2F3',scale:.82}).setLngLat(state.destination).addTo(state.map));
+  if (state.mode !== 'preview') state.routeMarkers.forEach(marker => {
+    marker.getElement().style.display = 'none';
+  });
 }
 function trafficUrl() {
   return 'https://api.tomtom.com/traffic/map/4/tile/flow/relative-delay/{z}/{x}/{y}.pbf?key='
@@ -262,100 +279,252 @@ function updateTrafficVisibility() {
       map.setLayoutProperty(layerId,'visibility',target);
   }
 }
-function setOrigin(mode) {
-  state.originMode = mode;
-  $('demoOrigin').classList.toggle('selected',mode==='demo');
-  $('gpsOrigin').classList.toggle('selected',mode==='gps');
-  if (mode !== 'gps') return;
-  if (!navigator.geolocation) { toast('Browser location unavailable.',true); return; }
-  toast('Requesting your location…');
-  navigator.geolocation.getCurrentPosition(pos => {
-    const p = [pos.coords.longitude,pos.coords.latitude];
-    state.gps = p;
-    if (state.gpsMarker) state.gpsMarker.setLngLat(p);
-    else {
-      const dot = document.createElement('div');
-      dot.className='gps-dot';
-      state.gpsMarker=new Marker({element:dot}).setLngLat(p).addTo(state.map);
-    }
-    toast('Location found · ±'+Math.round(pos.coords.accuracy)+' m accuracy.');
-    state.map.easeTo({center:p,zoom:14.4,duration:MOTION});
-  },err => {
-    toast('Location unavailable: '+err.message,true);
-    state.originMode='demo';
-    $('demoOrigin').classList.add('selected');
-    $('gpsOrigin').classList.remove('selected');
-  },{enableHighAccuracy:true,maximumAge:5000,timeout:16000});
-}
-function origin() { return state.originMode==='gps' ? state.gps : DEMO_ORIGIN; }
 
-// Search and routing are explicit, throttled and cached within this tab.
-async function planRoute(force = false) {
-  if (state.busy || !state.mapReady) return;
-  if (!state.key) { showSettings(); toast('Add your TomTom key to plan a route.',true); return; }
-  const start = origin();
-  if (!start) { toast('Waiting for your GPS location.',true); return; }
+function origin() { return state.originMode === 'gps' ? state.gps : DEMO_ORIGIN; }
+function updateOriginLabel() {
+  $('originDescription').textContent = state.originMode === 'gps' && state.gps ?
+    'From my location' : 'From Răzoare · demo';
+}
+function setOrigin(mode) {
+  $('originOptions').hidden = true;
+  $('originChange').setAttribute('aria-expanded','false');
+  if (mode === 'demo') {
+    state.originRequestId++;
+    state.originMode = 'demo';
+    updateOriginLabel();
+    return;
+  }
+  if (!navigator.geolocation) {
+    toast('Location is unavailable on this device.', true);
+    setOrigin('demo');
+    return;
+  }
+  if (state.gps && Date.now() - state.gpsAt < 300000) {
+    state.originMode = 'gps';
+    updateOriginLabel();
+    return;
+  }
+  state.originMode = 'gps';
+  state.gps = null; // never route with stale location while acquiring a fresh fix
+  const requestId = ++state.originRequestId;
+  $('originDescription').textContent = 'Locating…';
+  navigator.geolocation.getCurrentPosition(position => {
+    if (requestId !== state.originRequestId || state.originMode !== 'gps') return;
+    state.gps = [position.coords.longitude, position.coords.latitude];
+    state.gpsAt = Date.now();
+    if (!state.gpsMarker) {
+      const dot = document.createElement('div');
+      dot.className = 'gps-dot';
+      state.gpsMarker = new Marker({element: dot}).setLngLat(state.gps).addTo(state.map);
+    } else state.gpsMarker.setLngLat(state.gps);
+    updateOriginLabel();
+  }, error => {
+    if (requestId !== state.originRequestId || state.originMode !== 'gps') return;
+    state.originMode = 'demo';
+    updateOriginLabel();
+    toast('Location unavailable. Răzoare demo is selected.', true);
+    console.info('Location error:', error.message);
+  }, {enableHighAccuracy:true, maximumAge:5000, timeout:11000});
+}
+async function tryUseGrantedLocation() {
+  // Ask the browser only when the user opens destination search.
+  // Existing permission is reused silently; new permission is requested only
+  // after the user explicitly selects 'Use my location'.
+  if (!navigator.permissions || state.originMode === 'gps') return;
+  try {
+    const permission = await navigator.permissions.query({name:'geolocation'});
+    if (permission.state === 'granted' && state.mode === 'search') setOrigin('gps');
+  } catch { /* API not supported */ }
+}
+function openSearch() {
+  setMode('search');
+  $('searchFeedback').textContent = '';
+  $('searchResults').replaceChildren();
+  $('originOptions').hidden = true;
+  $('originChange').setAttribute('aria-expanded','false');
+  updateOriginLabel();
+  renderRecents();
+  tryUseGrantedLocation();
+  requestAnimationFrame(() => $('destination').focus({preventScroll:true}));
+}
+function backToIdle() {
+  setMode('idle');
+  $('destination').blur();
+  if (state.map) state.map.easeTo({
+    pitch:0,bearing:0,padding:{top:0,bottom:0,left:0,right:0},duration:MOTION
+  });
+}
+function renderItemList(container,items) {
+  container.replaceChildren();
+  for (const item of items) {
+    if (!Array.isArray(item.position) || !item.position.every(Number.isFinite)) continue;
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'search-result';
+    const marker = document.createElement('span');
+    marker.className = 'result-pin'; marker.setAttribute('aria-hidden','true');
+    marker.textContent = '⌖';
+    const copy = document.createElement('span');
+    copy.className = 'result-copy';
+    const name = document.createElement('strong');
+    name.textContent = item.name;
+    const address = document.createElement('small');
+    address.textContent = item.address || 'Bucharest';
+    copy.append(name,address);
+    row.append(marker,copy);
+    row.addEventListener('click', () => chooseDestination(item));
+    container.append(row);
+  }
+}
+function renderRecents() {
+  const query = norm($('destination').value);
+  const list = query ?
+    state.recents.filter(item => norm(item.name).includes(query) ||
+      norm(item.address || '').includes(query)) : state.recents;
+  $('recentSection').hidden = list.length === 0;
+  renderItemList($('recentList'),list);
+}
+function rememberDestination(item) {
+  state.recents = [item, ...state.recents.filter(x =>
+    pointKey(x.position) !== pointKey(item.position))].slice(0,RECENT_LIMIT);
+  try { sessionStorage.setItem('glide.recentDestinations',JSON.stringify(state.recents)); }
+  catch { /* session storage disabled */ }
+}
+async function searchDestinations() {
+  if (state.busy) return;
   const query = $('destination').value.trim();
-  if (!query) { toast('Enter a destination.',true); return; }
+  if (query.length < 3) {
+    $('searchFeedback').textContent = 'Enter at least three characters.';
+    return;
+  }
+  if (!state.key) {
+    showSettings();
+    toast('Add a TomTom routing key to search places.',true);
+    return;
+  }
+  const cached = state.searchCache.get(norm(query));
+  if (cached && Date.now()-cached.at < SEARCH_TTL) {
+    showSearchMatches(cached.items);
+    return;
+  }
+  if (Date.now()-state.lastSearchAt < SEARCH_GAP) {
+    $('searchFeedback').textContent = 'Please wait a moment before searching again.';
+    return;
+  }
+  state.lastSearchAt = Date.now();
+  state.busy = true;
+  $('plan').disabled = true;
+  $('plan').textContent = 'Searching…';
+  $('searchFeedback').textContent = '';
+  $('searchResults').replaceChildren();
+  $('recentSection').hidden = true;
+  try {
+    const text = /bucurești|bucharest/i.test(query) ? query : query+', București, Romania';
+    addCall('search');
+    const results = await discoverPlaces({
+      query:text,geoBias:{position:BUCHAREST},limit:5
+    });
+    const items = (results?.features||[]).map(feature => ({
+      name:feature.properties?.poi?.name ||
+        feature.properties?.address?.freeformAddress || query,
+      address:feature.properties?.address?.freeformAddress || '',
+      position:feature.geometry?.coordinates
+    })).filter(item => Array.isArray(item.position) && item.position.length === 2 &&
+      item.position.every(Number.isFinite));
+    state.searchCache.set(norm(query),{items,at:Date.now()});
+    if (state.mode === 'search' && norm($('destination').value) === norm(query))
+      showSearchMatches(items);
+  } catch (error) {
+    console.error('Glide destination search:',error);
+    $('searchFeedback').textContent = 'Search failed. Check your key or connection and try again.';
+    renderRecents();
+  } finally {
+    state.busy = false;
+    $('plan').disabled = false;
+    $('plan').textContent = 'Search';
+  }
+}
+function showSearchMatches(items) {
+  $('recentSection').hidden = true;
+  $('searchFeedback').textContent = items.length ? 'Select a destination' : 'No results. Try a fuller address.';
+  renderItemList($('searchResults'),items);
+}
+function chooseDestination(item) {
+  if (state.busy) return;
+  $('destination').value = item.name;
+  planRoute(false,item);
+}
+// Routing is called only after an explicit destination selection or manual
+// traffic refresh; opening search and typing do not consume TomTom requests.
+async function planRoute(force = false, chosenPlace = null) {
+  if (state.busy) return;
+  if (!state.mapReady) { toast('The map is still preparing. Please try again.',true); return; }
+  if (!state.key) { showSettings(); toast('Add a TomTom key to calculate routes.',true); return; }
+  const start = origin();
+  if (!start) { toast('Location is not available yet. Choose an origin.',true); return; }
+  const destination = force ? state.destination : chosenPlace?.position;
+  if (!destination || !destination.every(Number.isFinite)) {
+    toast('Select a destination from the search results.',true); return;
+  }
+  const signature = pointKey(start)+'|'+pointKey(destination);
   const now = Date.now();
-  const signature = norm(query)+'|'+pointKey(start);
   if (state.routes && signature === state.routeSignature && now-state.routeAt < ROUTE_TTL) {
-    if (force) toast('Live traffic was checked recently. Try again shortly.');
-    else { refreshMarkers(); setMode('preview'); renderPreview(); overview(); toast('Using your recent route.'); }
+    if (force) toast('Traffic was updated recently. Try again shortly.');
+    else {
+      refreshMarkers();setMode('preview');renderPreview();overview();
+      toast('Using your recent route.');
+    }
     return;
   }
-  if (now-state.attemptAt < REQUEST_GAP) {
-    toast('Request limit: try again in '+Math.ceil((REQUEST_GAP-(now-state.attemptAt))/1000)+' seconds.');
+  if (now - state.attemptAt < REQUEST_GAP) {
+    toast('Please wait '+Math.ceil((REQUEST_GAP-(now-state.attemptAt))/1000)+
+      ' seconds before recalculating.');
     return;
   }
-  state.attemptAt=now;
+  state.attemptAt = now;
+  state.destination = destination;
+  state.destinationName = force ?
+    state.destinationName : (chosenPlace.name || $('destination').value.trim());
   uiBusy(true);
   try {
-    let location;
-    const cached = state.searchCache.get(norm(query));
-    if (force && state.destination && signature===state.routeSignature) {
-      location=state.destination;
-    } else if (cached && now-cached.at < SEARCH_TTL) {
-      location=cached.position;
-      state.destinationName=cached.name;
-    } else {
-      const text = /bucurești|bucharest/i.test(query) ? query : query+', București, Romania';
-      addCall('search');
-      const results=await discoverPlaces({query:text,geoBias:{position:BUCHAREST},limit:5});
-      const place=results?.features?.[0];
-      if (!place?.geometry?.coordinates) throw new Error('Destination not found. Try a more precise address.');
-      location=place.geometry.coordinates;
-      state.destinationName=place.properties?.poi?.name ||
-        place.properties?.address?.freeformAddress || query;
-      state.searchCache.set(norm(query),{position:location,name:state.destinationName,at:now});
-    }
-    state.destination=location;
     addCall('route');
-    const result=await calculateRoute({
-      locations:[start,location], travelMode:'car',maxAlternatives:2,
+    const result = await calculateRoute({
+      locations:[start,destination],travelMode:'car',maxAlternatives:2,
       guidance:{type:'coded'},costModel:{routeType:'fast',traffic:'live'}
     });
     if (!result?.features?.length || !routeSegments(result.features[0]).length)
-      throw new Error('Routing did not return a usable road geometry.');
+      throw new Error('No usable road route was returned.');
     state.routes=result;
     state.routeSignature=signature;
     state.routeAt=Date.now();
     state.selected=0;
+    $('searchFeedback').textContent = '';
+    if (!force) rememberDestination({
+      name:state.destinationName,address:chosenPlace.address || '',
+      position:destination
+    });
     refreshMarkers();
     setMode('preview');
     renderPreview();
     overview();
     updateTrafficVisibility();
-  } catch (e) {
-    console.error('Glide route planning:',e);
-    toast('Route unavailable: '+(e?.message||'check routing permission'),true);
-  } finally { uiBusy(false); }
+  } catch (error) {
+    console.error('Glide routing:',error);
+    toast('Route unavailable: '+(error.message||'check routing access'),true);
+    $('searchFeedback').textContent = 'Unable to calculate this route. You can choose another place.';
+    if (state.mode === 'preview' && force) {
+      // Keep the last usable route visible even if a manual refresh fails.
+      requestDraw();
+    }
+  } finally {
+    uiBusy(false);
+  }
 }
 function renderPreview() {
   const route=selectedRoute();
   if (!route) return;
   const summary=route.properties?.summary || {};
-  $('previewDestination').textContent=state.destinationName || $('destination').value.trim();
+  $('previewDestination').textContent=state.destinationName || 'Destination';
   $('summaryTime').textContent=minutes(summary.travelTimeInSeconds);
   $('summaryLength').textContent=distance(summary.lengthInMeters);
   const delay=summary.trafficDelayInSeconds || 0;
@@ -542,8 +711,24 @@ function stopNavigationDemo(){
   overview();
 }
 
-function attachEvents(){
-  $('routeForm').addEventListener('submit',e=>{e.preventDefault();planRoute();});
+
+function attachEvents() {
+  $('idlePrompt').addEventListener('click',openSearch);
+  $('searchBack').addEventListener('click',backToIdle);
+  $('searchDismiss').addEventListener('click',backToIdle);
+  $('routeForm').addEventListener('submit',event=>{
+    event.preventDefault();
+    searchDestinations();
+  });
+  $('destination').addEventListener('input',()=>{
+    $('searchResults').replaceChildren();
+    $('searchFeedback').textContent='';
+    renderRecents(); // Local filtering only; does not call an API.
+  });
+  $('originChange').addEventListener('click',()=>{
+    $('originOptions').hidden=!$('originOptions').hidden;
+    $('originChange').setAttribute('aria-expanded',String(!$('originOptions').hidden));
+  });
   $('demoOrigin').addEventListener('click',()=>setOrigin('demo'));
   $('gpsOrigin').addEventListener('click',()=>setOrigin('gps'));
   $('settingsOpen').addEventListener('click',()=>{
@@ -551,15 +736,15 @@ function attachEvents(){
   });
   $('settingsClose').addEventListener('click',()=>{$('settingsPanel').hidden=true;});
   $('saveKey').addEventListener('click',saveKey);
-  $('apiKey').addEventListener('keydown',e=>{if(e.key==='Enter')saveKey();});
+  $('apiKey').addEventListener('keydown',event=>{if(event.key==='Enter')saveKey();});
   $('trafficToggle').addEventListener('change',updateTrafficVisibility);
   $('backToPlanning').addEventListener('click',()=>{
-    // Keep the latest route cached, but don't draw it in planning mode.
-    state.routeMarkers.forEach(x=>x.remove());
-    state.routeMarkers=[];
-    setMode('planning');
-    requestDraw();
-    state.map.easeTo({pitch:0,bearing:0,padding:{top:0,bottom:0,left:0,right:0},duration:MOTION});
+    // Keep the calculated route in memory, but hide it during a new search.
+    state.routeMarkers.forEach(x=>x.getElement().style.display='none');
+    openSearch();
+    state.map.easeTo({
+      pitch:0,bearing:0,padding:{top:0,bottom:0,left:0,right:0},duration:MOTION
+    });
   });
   $('recalculate').addEventListener('click',()=>planRoute(true));
   $('fit').addEventListener('click',overview);
@@ -572,12 +757,12 @@ function attachEvents(){
     $('navFollow').setAttribute('aria-pressed',String(state.sim.follow));
     if(state.sim.follow)navCamera(along(state.sim.distance),true);
   });
-  $('navScrub').addEventListener('input',e=>{
+  $('navScrub').addEventListener('input',event=>{
     pauseSim();
-    state.sim.follow=false; // avoid repeated tile loading during scrubbing
+    state.sim.follow=false; // Don't spend map-tile requests scrubbing.
     $('navFollow').classList.remove('selected');
     $('navFollow').setAttribute('aria-pressed','false');
-    positionSim(state.sim.length*Number(e.target.value)/1000);
+    positionSim(state.sim.length*Number(event.target.value)/1000);
   });
   $('recenter').addEventListener('click',()=>{
     if(state.mode==='navigation'){
@@ -585,17 +770,23 @@ function attachEvents(){
       $('navFollow').classList.add('selected');
       $('navFollow').setAttribute('aria-pressed','true');
       navCamera(along(state.sim.distance),true);
-    }else if(state.mode==='preview')overview();
-    else state.map.easeTo({center:BUCHAREST,zoom:11.8,pitch:0,bearing:0,padding:{top:0,bottom:0,left:0,right:0},duration:MOTION});
+    } else if(state.mode==='preview') overview();
+    else state.map.easeTo({
+      center:BUCHAREST,zoom:11.8,pitch:0,bearing:0,
+      padding:{top:0,bottom:0,left:0,right:0},duration:MOTION
+    });
   });
   document.addEventListener('visibilitychange',()=>{
     if(document.hidden&&state.sim.playing)pauseSim();
   });
-  document.addEventListener('keydown',e=>{
-    if(e.key==='Escape')$('settingsPanel').hidden=true;
+  document.addEventListener('keydown',event=>{
+    if(event.key!=='Escape')return;
+    if(!$('settingsPanel').hidden) $('settingsPanel').hidden=true;
+    else if(state.mode==='search') backToIdle();
   });
 }
 initKey();
 initMap();
 attachEvents();
-setMode('planning');
+setMode('idle');
+updateOriginLabel();
