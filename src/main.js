@@ -1,5 +1,5 @@
 import { TomTomConfig } from '@tomtom-org/maps-sdk/core';
-import { TomTomMap, RoutingModule, TrafficFlowModule } from '@tomtom-org/maps-sdk/map';
+import { TomTomMap, TrafficFlowModule } from '@tomtom-org/maps-sdk/map';
 import { calculateRoute, discoverPlaces } from '@tomtom-org/maps-sdk/services';
 import { Marker, LngLatBounds } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -9,7 +9,7 @@ import './style.css';
 const DEMO_ORIGIN = [26.061, 44.429];
 const BUCHAREST = [26.1025, 44.4397];
 const el = (id) => document.getElementById(id);
-const state = { map: null, routing: null, traffic: null, routes: null, destination: null, gps: null, marker: null, originMode: 'demo', busy: false, selected: 0 };
+const state = { map: null, ready: false, traffic: null, routes: null, destination: null, gps: null, marker: null, waypointMarkers: [], originMode: 'demo', busy: false, selected: 0 };
 
 function status(message, error = false) {
   el('message').textContent = message;
@@ -29,33 +29,48 @@ async function connect() {
   const key = el('apiKey').value.trim();
   if (!key) { status('Enter your TomTom API key.', true); return; }
   el('connect').disabled = true;
-  status('Starting map…');
+  status('Loading map style…');
+  state.ready = false;
   try {
     TomTomConfig.instance.put({ apiKey: key, language: 'en-GB' });
     if (state.map?.mapLibreMap) state.map.mapLibreMap.remove();
     state.map = new TomTomMap({
-      style: 'drivingDark',
+      apiKey: key,
+      style: { type: 'standard', id: 'drivingDark', include: ['trafficFlow', 'trafficIncidents'] },
       mapLibre: { container: 'map', center: BUCHAREST, zoom: 12, attributionControl: true }
     });
-    state.routing = await RoutingModule.create(state.map);
-    try {
-      state.traffic = await TrafficFlowModule.get(state.map, { visible: el('trafficToggle').checked });
-    } catch (err) {
-      console.warn('Traffic overlay unavailable:', err);
-      status('Map ready; traffic overlay is unavailable. Routing can still use live traffic.');
+    const map = state.map.mapLibreMap;
+    if (!map.loaded()) {
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Map loading timed out. Check map API permissions and domain settings.')), 20000);
+        map.once('load', () => { clearTimeout(timer); resolve(); });
+        map.on('error', (event) => {
+          if (!map.isStyleLoaded()) {
+            clearTimeout(timer);
+            reject(event.error || new Error('Could not load TomTom map style'));
+          }
+        });
+      });
     }
-    // Key is only saved in this browser tab, never bundled into GitHub files.
+    state.ready = true;
     try { sessionStorage.setItem('laneform.tomtom.key', key); } catch { /* storage disabled */ }
     el('setup').hidden = true;
     el('planner').hidden = false;
     el('connection').textContent = 'CONNECTED';
     el('connection').classList.add('connected');
-    status('Map ready. Try Piața Victoriei as a destination.');
+    status('Map ready. Search for a destination, such as Piața Victoriei.');
+    try {
+      state.traffic = await TrafficFlowModule.get(state.map, { visible: el('trafficToggle').checked });
+    } catch (err) {
+      console.warn('Optional traffic overlay unavailable:', err);
+      status('Map loaded; traffic overlay unavailable. Routes can still use traffic.');
+    }
   } catch (err) {
-    console.error('Could not start map:', err);
-    status('Map startup failed: ' + (err?.message || 'unknown error') + '. Verify key access to Map Display and Assets APIs.', true);
+    console.error('Map connection failed:', err);
+    state.ready = false;
+    status('Map connection failed: ' + (err?.message || 'unknown error') + '. Check the browser console for details.', true);
+    try { state.map?.mapLibreMap?.remove(); } catch { /* no cleanup necessary */ }
     state.map = null;
-    state.routing = null;
   } finally {
     el('connect').disabled = false;
   }
@@ -103,10 +118,31 @@ function fitRoute() {
     maxZoom: 16, duration: 650
   });
 }
+function drawRouteLines() {
+  const map = state.map?.mapLibreMap;
+  if (!map || !map.isStyleLoaded() || !state.routes?.features?.length) return;
+  const routes = state.routes.features;
+  const sets = [
+    ['laneform-route-alternatives', routes.filter((_, i) => i !== state.selected), 'laneform-line-alternatives', '#95b1bf', 5],
+    ['laneform-route-selected', [routes[state.selected]], 'laneform-line-selected', '#d8f4a7', 7],
+  ];
+  for (const [sourceId, features, layerId, color, width] of sets) {
+    const data = { type: 'FeatureCollection', features };
+    const source = map.getSource(sourceId);
+    if (source) source.setData(data);
+    else {
+      map.addSource(sourceId, { type: 'geojson', data });
+      map.addLayer({ id: layerId, source: sourceId, type: 'line',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': color, 'line-width': width, 'line-opacity': 0.95 } });
+    }
+  }
+}
+
 async function selectRoute(index) {
   if (!state.routes?.features?.[index]) return;
   state.selected = index;
-  await state.routing.selectRoute(index);
+  drawRouteLines();
   document.querySelectorAll('.route-choice').forEach((button, n) => {
     button.classList.toggle('selected', n === index);
   });
@@ -121,6 +157,7 @@ async function selectRoute(index) {
   box.append(main, details);
   fitRoute();
 }
+
 async function renderRoutes() {
   const container = el('routeChoices');
   container.replaceChildren();
@@ -140,7 +177,7 @@ async function renderRoutes() {
   await selectRoute(0);
 }
 async function planRoute(refresh = false) {
-  if (state.busy || !state.routing) return;
+  if (state.busy || !state.ready) return;
   const start = origin();
   if (!start) { status('Wait for GPS, or choose the Răzoare demo starting point.', true); return; }
   const query = el('destination').value.trim();
@@ -163,8 +200,12 @@ async function planRoute(refresh = false) {
       guidance: { type: 'coded' }, costModel: { routeType: 'fast', traffic: 'live' }
     });
     if (!state.routes?.features?.length) throw new Error('Routing returned no available route.');
-    await state.routing.showRoutes(state.routes);
-    await state.routing.showWaypoints(locations);
+    drawRouteLines();
+    state.waypointMarkers.forEach((marker) => marker.remove());
+    state.waypointMarkers = locations.map((coord, index) =>
+      new Marker({ color: index === 0 ? '#d8f4a7' : '#f0f6ed' })
+        .setLngLat(coord).addTo(state.map.mapLibreMap)
+    );
     await renderRoutes();
     status('Routes use live traffic at calculation time. GPS tracking and rerouting are not implemented yet.');
   } catch (err) {
