@@ -87,7 +87,7 @@ assert.ok(js.includes("renderLaneAssistance(laneData)"),
 assert.ok(existing.has('laneCoverage') && css.includes('.lane-rail'),
   'User needs source coverage diagnostics and contextual lane visualization');
 assert.ok(existing.has('previewLaneStatus') &&
-  js.includes("Lane assist unavailable on this route"),
+  js.includes("No mapped lane guidance on this route"),
   'Preview must explicitly explain unavailable lane guidance');
 assert.ok(js.includes("nextManeuverState(instructions,offset,realLength)") &&
   js.includes("arrivalApproachText(nextState.instruction)"),
