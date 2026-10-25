@@ -147,7 +147,8 @@
       <button id="saveKey" type="button">Save</button>
     </div>
     <p class="subtle-note">Stored in this browser tab. The base map doesn't require this key.</p>
-    <label class="settings-switch"><span>Show major traffic delays</span><input id="trafficToggle" type="checkbox"></label>
+    <label class="settings-switch"><span>Show major traffic delays</span><input id="trafficToggle" type="checkbox" autocomplete="off"></label>
+    <p id="trafficBudgetStatus" class="subtle-note">Traffic overlay is optional and only loads in route preview.</p>
     <details class="developer-details"><summary>Technical details</summary>
       <p id="usageCounter">0 searches · 0 routes this tab</p>
       <p id="laneCoverage">Lane data: shown after a route is calculated</p>

@@ -11,6 +11,8 @@ import { deriveOsmLaneRecords } from './osm-lane-geometry.js';
 import { laneEventsFromCorridor, buildLaneTimeline, chooseLaneLookahead }
   from './lane-lookahead.js';
 import {createJunctionDetail} from './junction-detail.js';
+import {MAX_TRAFFIC_TILE_ATTEMPTS,EMPTY_TRAFFIC_TILE,isTomTomTrafficTile,
+  trafficTileBudget} from './traffic-budget.js';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 
@@ -37,6 +39,7 @@ const state = {
   searchCache: new Map(), routeSignature: '', routeAt: 0, attemptAt: 0,
   lastSearchAt: 0, recents: [], searchMatches: [],
   calls: { search: 0, route: 0 }, trafficAvailable: false, lastTrafficAt: 0,
+  trafficTileAttempts: 0, trafficBudgetTimer: null,
   laneCache: new WeakMap(),
   osmCache: new WeakMap(),
   corridorCache: new WeakMap(), timelineCache: new WeakMap(),
@@ -87,6 +90,8 @@ function initKey() {
     const saved = sessionStorage.getItem('laneform.tomtom.key');
     if (saved) { state.key = saved; $('apiKey').value = saved; }
     const count = JSON.parse(sessionStorage.getItem('glide.callCounts') || 'null');
+    state.trafficTileAttempts=trafficTileBudget(
+      Number(sessionStorage.getItem('glide.trafficTileAttempts'))).used;
     const recent = JSON.parse(sessionStorage.getItem('glide.recentDestinations') || '[]');
     if (Array.isArray(recent)) state.recents = recent.filter(item =>
       typeof item?.name === 'string' && Array.isArray(item.position) &&
@@ -98,6 +103,7 @@ function initKey() {
   } catch {}
   $('usageCounter').textContent = state.calls.search + ' searches · ' + state.calls.route + ' routes this tab';
   if (state.key) TomTomConfig.instance.put({ apiKey: state.key, language: 'en-GB' });
+  updateTrafficBudgetLabel();
 }
 function saveKey() {
   const key = $('apiKey').value.trim();
@@ -116,6 +122,11 @@ function setMode(mode) {
   if (mode !== 'preview') closeRoutesTray();
   state.mode = mode;
   document.body.dataset.mode = mode;
+  // The optional TomTom tile layer must never follow the animated camera.
+  if(mode!=='preview'){
+    $('trafficToggle').checked=false;
+    updateTrafficVisibility();
+  }
   $('idlePrompt').hidden = mode !== 'idle';
   $('searchSheet').hidden = mode !== 'search';
   $('previewSheet').hidden = mode !== 'preview';
@@ -138,7 +149,30 @@ function initMap() {
     container: 'map', style: structuredClone(mapStyle), center: DEMO_ORIGIN,
     zoom: 14.8, maxZoom: 19.5, pitch: 0, bearing: 0,
     attributionControl: true, refreshExpiredTiles: false,
-    antialias: true
+    antialias: true,
+    // Called for tile URLs only; map requests from OpenFreeMap are untouched.
+    transformRequest(url,type){
+      if(!isTomTomTrafficTile(url,type))return {url};
+      if(state.trafficTileAttempts>=MAX_TRAFFIC_TILE_ATTEMPTS)
+        return {url:EMPTY_TRAFFIC_TILE};
+      state.trafficTileAttempts++;
+      try{
+        sessionStorage.setItem('glide.trafficTileAttempts',
+          String(state.trafficTileAttempts));
+      }catch{}
+      updateTrafficBudgetLabel();
+      if(state.trafficTileAttempts>=MAX_TRAFFIC_TILE_ATTEMPTS){
+        $('trafficToggle').checked=false;
+        if(!state.trafficBudgetTimer){
+          state.trafficBudgetTimer=setTimeout(()=>{
+            state.trafficBudgetTimer=null;
+            updateTrafficVisibility();
+            toast('Traffic tile budget reached. Overlay paused for this tab.');
+          },0);
+        }
+      }
+      return {url};
+    }
   });
   state.map = map;
   map.on('style.load', () => {
@@ -425,45 +459,73 @@ function refreshMarkers() {
     marker.getElement().style.display = 'none';
   });
 }
-function trafficUrl() {
+function trafficUrl(){
   return 'https://api.tomtom.com/traffic/map/4/tile/flow/relative-delay/{z}/{x}/{y}.pbf?key='
     + encodeURIComponent(state.key);
 }
-function updateTrafficVisibility() {
-  const map = state.map;
-  if (!map || !state.mapReady) return;
-  const active = $('trafficToggle').checked && !!state.routes && !!state.key && map.getZoom() >= 12;
-  const sourceId = 'glide-traffic', layerId = 'glide-traffic-delays';
-  if (!map.getSource(sourceId)) {
-    if (!active) return;
-    try {
-      map.addSource(sourceId, {type:'vector',tiles:[trafficUrl()],minzoom:0,maxzoom:16});
-      map.addLayer({
-        id: layerId, source: sourceId, 'source-layer': 'Traffic flow', type:'line',
-        filter:['any',
-          ['==',['get','road_closure'],true],
-          ['all',['has','traffic_level'],['<',['to-number',['get','traffic_level'],1],.50]]
-        ],
-        layout:{'line-cap':'round','line-join':'round'},
-        paint:{
-          'line-color':['case',
-            ['==',['get','road_closure'],true],'#8D4747',
-            ['<',['to-number',['get','traffic_level'],1],.28],'#8D4747',
-            '#A87A45'],
-          'line-width':['interpolate',['linear'],['zoom'],12,2.1,16,4.3],
-          'line-opacity':.70
-        }
-      });
-      state.trafficAvailable = true;
-      state.lastTrafficAt = Date.now();
-    } catch (error) { console.warn('Optional traffic overlay unavailable:', error); }
-  } else if (map.getLayer(layerId)) {
-    const target = active ? 'visible' : 'none';
-    if (map.getLayoutProperty(layerId,'visibility') !== target)
-      map.setLayoutProperty(layerId,'visibility',target);
-  }
+function updateTrafficBudgetLabel(){
+  const node=$('trafficBudgetStatus');
+  if(!node)return;
+  const budget=trafficTileBudget(state.trafficTileAttempts);
+  node.textContent='TomTom traffic tile attempts this tab: '+budget.used+'/'+
+    MAX_TRAFFIC_TILE_ATTEMPTS+'. '+(budget.exhausted
+      ? 'Limit reached; overlay disabled until a new browser tab.'
+      : 'Optional preview only; off during simulation. Not official billing data.');
 }
-
+function removeTrafficSource(){
+  const map=state.map;
+  if(!map)return;
+  const layerId='glide-traffic-delays',sourceId='glide-traffic';
+  try{
+    if(map.getLayer(layerId))map.removeLayer(layerId);
+    if(map.getSource(sourceId))map.removeSource(sourceId);
+  }catch(error){
+    console.warn('Traffic overlay removal deferred:',error);
+  }
+  state.trafficAvailable=false;
+}
+function updateTrafficVisibility(){
+  const map=state.map;
+  if(!map||!state.mapReady)return;
+  const exhausted=trafficTileBudget(state.trafficTileAttempts).exhausted;
+  const active=state.mode==='preview' && $('trafficToggle').checked &&
+    !!state.routes && !!state.key && !exhausted &&
+    map.getZoom()>=12 && map.getZoom()<=15;
+  const sourceId='glide-traffic',layerId='glide-traffic-delays';
+  if(!active){
+    // Hiding a MapLibre layer alone can leave a remote tile source alive.
+    // Completely remove it when not explicitly previewing congestion.
+    removeTrafficSource();
+    updateTrafficBudgetLabel();
+    return;
+  }
+  if(map.getSource(sourceId))return;
+  try{
+    map.addSource(sourceId,{
+      type:'vector',tiles:[trafficUrl()],minzoom:12,maxzoom:15,
+      attribution:'© TomTom Traffic'
+    });
+    map.addLayer({
+      id:layerId,source:sourceId,'source-layer':'Traffic flow',type:'line',
+      filter:['any',
+        ['==',['get','road_closure'],true],
+        ['all',['has','traffic_level'],
+          ['<',['to-number',['get','traffic_level'],1],.50]]
+      ],
+      layout:{'line-cap':'round','line-join':'round'},
+      paint:{
+        'line-color':['case',
+          ['==',['get','road_closure'],true],'#8D4747',
+          ['<',['to-number',['get','traffic_level'],1],.28],'#8D4747',
+          '#A87A45'],
+        'line-width':['interpolate',['linear'],['zoom'],12,2.1,15,3.5],
+        'line-opacity':.70
+      }
+    });
+    state.trafficAvailable=true;
+    state.lastTrafficAt=Date.now();
+  }catch(error){console.warn('Optional traffic overlay unavailable:',error);}
+}
 function origin() { return state.originMode === 'gps' ? state.gps : DEMO_ORIGIN; }
 function updateOriginLabel() {
   $('originDescription').textContent = state.originMode === 'gps' && state.gps ?
@@ -1044,7 +1106,20 @@ function attachEvents() {
   $('settingsClose').addEventListener('click',()=>{$('settingsPanel').hidden=true;});
   $('saveKey').addEventListener('click',saveKey);
   $('apiKey').addEventListener('keydown',event=>{if(event.key==='Enter')saveKey();});
-  $('trafficToggle').addEventListener('change',updateTrafficVisibility);
+  $('trafficToggle').addEventListener('change',()=>{
+    if($('trafficToggle').checked &&
+      trafficTileBudget(state.trafficTileAttempts).exhausted){
+      $('trafficToggle').checked=false;
+      toast('Traffic tile preview has reached its per-tab request limit.');
+    }else if($('trafficToggle').checked && state.mode!=='preview'){
+      $('trafficToggle').checked=false;
+      toast('Traffic tiles are available only while previewing a planned route.');
+    }else if($('trafficToggle').checked &&
+      (state.map?.getZoom?.()||0)>15){
+      toast('Zoom out slightly to see major traffic delays.');
+    }
+    updateTrafficVisibility();
+  });
   junctionDetail=createJunctionDetail({
     mapGetter:()=>state.map,
     buttonGetter:()=>$('junctionToggle'),

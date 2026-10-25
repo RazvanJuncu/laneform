@@ -374,3 +374,45 @@ a display-level spatial match.
 Tests: `scripts/check-junction-focus.mjs` validates emphasis,
 background filtering, near-route markings, missing route and source
 immutability.
+
+## Traffic API usage guard
+
+The TomTom dashboard reported about 8.1K aggregated API requests for a week of
+prototype development. This **does not identify** which API category generated
+those calls or imply that all were routing requests or billable requests.
+TomTom accounts for traffic vector tiles, map tiles, routing, search and
+other endpoints individually; inspect the dashboard's API usage breakdown.
+
+The current Glide base map is served exclusively from **OpenFreeMap**.
+TomTom provides destination search, traffic-aware route calculation, and one
+optional visual overlay. MapLibre's traffic source used to remain live during
+camera pans, zooms and simulation if the toggle was enabled, multiplying
+metered vector tile requests.
+
+The new guard keeps traffic vector tiles **opt-in and preview-only**:
+- They are not loaded merely by opening Glide or selecting a destination.
+- The traffic tile source and style layer are **removed**, not only hidden,
+  whenever the toggle is off, the user leaves route preview, the camera zoom
+  exceeds level 15, or the tab's request guard has been exhausted.
+- Entering simulation clears the traffic tile checkbox. The computed route's
+  ETA and traffic-aware routing do **not** change.
+- MapLibre `transformRequest` conservatively counts TomTom traffic tile
+  attempts (not all network requests and not necessarily chargeable requests)
+  in `sessionStorage`. After **80 requests initiated in that tab**, further
+  TomTom traffic tile URLs are replaced with an empty local vector-tile
+  response and the map source is detached. Counts persist across refreshes of
+  the same tab. New tabs reset this limit, so this is **not** an account-wide
+  quota control.
+- The Preferences panel shows the count and guard status. Glide's separate
+  search and route counters are also session-local. The official dashboard
+  remains the only source for actual billed totals.
+- Underlying TomTom route calls only happen after a selected destination or
+  explicit route recalculation; place searches are cached and not triggered
+  for every keystroke.
+
+The cap is a local prototype safeguard. Production would need server-side
+per-user/account quotas, map traffic aggregation or tiled CDN policy, API-key
+restrictions, and centralized usage and billing alerts.
+
+Source: https://docs.tomtom.com/pricing and
+https://docs.tomtom.com/platform/documentation/status-and-support/faqs
