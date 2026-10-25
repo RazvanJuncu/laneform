@@ -6,7 +6,7 @@ import mapStyle from './glide-map-style.json';
 import { splitPathByDistance } from './route-progress.js';
 import { extractRouteLaneGuidance, upcomingLaneGuidance, LANE_ARROWS } from './lane-assist.js';
 import { nextManeuverState, arrivalApproachText } from './maneuver-guidance.js';
-import { fetchOsmLaneWays } from './osm-lane-source.js';
+
 import { deriveOsmLaneRecords } from './osm-lane-geometry.js';
 import { laneEventsFromCorridor, buildLaneTimeline, chooseLaneLookahead }
   from './lane-lookahead.js';
@@ -278,11 +278,6 @@ function updateLaneCoverage() {
       'Additional junction geometry is prepared individually during route simulation. '+
       'Reconstructed geometry is unverified, not lane-to-lane navigation.'
     : 'Lane sources appear after route planning.';
-  const retry=$('retryLaneLookup');
-  if(retry){
-    retry.hidden=!route || !['unavailable','rate-limited'].includes(status);
-    retry.disabled=status==='checking';
-  }
   const preview=$('previewLaneStatus');
   if(preview){
     const tt=tomtom ? tomtom+' TomTom' : 'No TomTom lane guidance';
@@ -299,44 +294,6 @@ function updateLaneCoverage() {
         'Mapped turn arrows are not verified lane connections.'
       : '';
   }
-}
-function startOsmLaneLookup({force=false}={}) {
-  const route=selectedRoute();
-  if(!route)return;
-  const requestId=++state.osmRequestId;
-  state.osmWays=[];state.osmCache=new WeakMap();
-  state.corridorCache=new WeakMap();state.timelineCache=new WeakMap();
-  state.osmStatus='checking';state.osmChecked=0;state.osmCoverageMeters=0;
-  state.osmRawWays=0;state.osmProvider='';
-  state.osmFailure='';state.osmFailureKind='';state.osmRetryAfter=0;
-  updateLaneCoverage();
-  const signature=state.routeSignature;
-  // The optional OSM lookup is bounded, cached and explicitly manual on retry.
-  // It never uses additional TomTom requests or runs during route playback.
-  void fetchOsmLaneWays(route,signature,{force}).then(result=>{
-    if(requestId!==state.osmRequestId)return;
-    state.osmStatus=result.status;
-    state.osmChecked=result.checked||0;
-    state.osmWays=result.ways||[];
-    state.osmRawWays=result.wayCount||0;
-    state.osmProvider=result.source||'';
-    state.osmFailure=result.reason||'';
-    state.osmFailureKind=result.errorKind||'';
-    state.osmRetryAfter=result.retryAfterSeconds||0;
-    state.osmCoverageMeters=result.coverageMeters||0;
-    state.osmCache=new WeakMap();
-    state.corridorCache=new WeakMap();state.timelineCache=new WeakMap();
-    updateLaneCoverage();
-    if(state.mode==='navigation')navHud();
-  }).catch(error=>{
-    if(requestId!==state.osmRequestId)return;
-    console.warn('Optional OSM lane lookup unavailable:',error);
-    state.osmStatus='unavailable';state.osmFailure='Browser network error';
-    state.osmFailureKind='network';
-    state.osmWays=[];state.osmCache=new WeakMap();
-    state.corridorCache=new WeakMap();state.timelineCache=new WeakMap();
-    updateLaneCoverage();
-  });
 }
 function clearCanvas() {
   const canvas = $('routeOverlay');
