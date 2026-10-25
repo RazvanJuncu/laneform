@@ -5,13 +5,16 @@ import {buildJunctionTargets,upcomingJunction,junctionCacheKey,junctionViewMode}
   from './junction-logic.js';
 import {smallAreaOsmUrl,MAX_OSM_BYTES,validateOsmXML,
   validateGeojson,blankCollection} from './street-geometry-adapter.js';
+import {partitionJunctionGeometry} from './junction-focus.js';
 
 const DATA_SOURCE='glide-junction-lanes';
+const FOCUS_SOURCE='glide-junction-focus';
 const MARKS_SOURCE='glide-junction-markings';
 const JUNCTION_SOURCE='glide-junction-lines';
 const COOLDOWN_MS=30000;
 const MAX_CACHE=5;
 const IDS=['glide-junction-surface','glide-junction-edges',
+  'glide-junction-focus-fill','glide-junction-focus-edge',
   'glide-junction-paint','glide-junction-crossing'];
 const EMPTY=blankCollection();
 let enginePromise=null;
@@ -63,21 +66,35 @@ async function downloadJunction(position){
     return xml;
   }finally{clearTimeout(timer);}
 }
+// MapLibre rendering: route-matched nearby lane polygons stand out subtly;
+// all other reconstructed arms remain context, not navigation instructions.
 function styleLayers(map){
   if(!map?.isStyleLoaded?.())return false;
-  for(const source of [DATA_SOURCE,MARKS_SOURCE,JUNCTION_SOURCE]){
-    if(!map.getSource(source))
-      map.addSource(source,{type:'geojson',data:EMPTY});
+  for(const source of [DATA_SOURCE,FOCUS_SOURCE,MARKS_SOURCE,JUNCTION_SOURCE]){
+    if(!map.getSource(source))map.addSource(source,{
+      type:'geojson',data:EMPTY
+    });
   }
+  const fade={duration:650,delay:0};
   const layers=[
     {id:IDS[0],type:'fill',source:DATA_SOURCE,
-      paint:{'fill-color':'#738E9D','fill-opacity':.24}},
+      paint:{'fill-color':'#52636F','fill-opacity':.075,
+        'fill-opacity-transition':fade}},
     {id:IDS[1],type:'line',source:DATA_SOURCE,
-      paint:{'line-color':'#B8CBD5','line-width':1,'line-opacity':.62}},
-    {id:IDS[2],type:'line',source:MARKS_SOURCE,
-      paint:{'line-color':'#E0E8EC','line-width':1.4,'line-opacity':.74}},
-    {id:IDS[3],type:'line',source:JUNCTION_SOURCE,
-      paint:{'line-color':'#8EA9B6','line-width':1.1,'line-opacity':.56}}
+      paint:{'line-color':'#667B88','line-width':.65,
+        'line-opacity':.12,'line-opacity-transition':fade}},
+    {id:IDS[2],type:'fill',source:FOCUS_SOURCE,
+      paint:{'fill-color':'#AFC4D0','fill-opacity':.205,
+        'fill-opacity-transition':fade}},
+    {id:IDS[3],type:'line',source:FOCUS_SOURCE,
+      paint:{'line-color':'#C8D7E0','line-width':1.1,
+        'line-opacity':.54,'line-opacity-transition':fade}},
+    {id:IDS[4],type:'line',source:MARKS_SOURCE,
+      paint:{'line-color':'#DDE7EC','line-width':1.3,
+        'line-opacity':.67,'line-opacity-transition':fade}},
+    {id:IDS[5],type:'line',source:JUNCTION_SOURCE,
+      paint:{'line-color':'#738997','line-width':.75,
+        'line-opacity':.16,'line-opacity-transition':fade}}
   ];
   for(const layer of layers)if(!map.getLayer(layer.id))map.addLayer({
     ...layer,layout:{visibility:'none'}
@@ -86,16 +103,18 @@ function styleLayers(map){
 }
 function show(map,visible){
   if(!map?.isStyleLoaded?.())return;
-  for(const id of IDS)if(map.getLayer(id))
-    map.setLayoutProperty(id,'visibility',visible?'visible':'none');
+  const v=visible?'visible':'none';
+  for(const id of IDS)if(map.getLayer(id) &&
+    map.getLayoutProperty(id,'visibility')!==v)
+      map.setLayoutProperty(id,'visibility',v);
 }
-function assign(map,data){
+function assign(map,data,selection){
   if(!styleLayers(map))return;
-  map.getSource(DATA_SOURCE).setData(data?.lanes||EMPTY);
-  map.getSource(MARKS_SOURCE).setData(data?.markings||EMPTY);
+  map.getSource(DATA_SOURCE).setData(selection?.context||data?.lanes||EMPTY);
+  map.getSource(FOCUS_SOURCE).setData(selection?.focus||EMPTY);
+  map.getSource(MARKS_SOURCE).setData(selection?.markings||EMPTY);
   map.getSource(JUNCTION_SOURCE).setData(data?.junctions||EMPTY);
 }
-const emptyStatus=()=>({detail:false,target:null,ready:false});
 export function createJunctionDetail({
   mapGetter,buttonGetter,onViewChange=()=>{},onButtonAction=()=>{}
 }={}){
@@ -119,7 +138,10 @@ export function createJunctionDetail({
     if(!b.hidden){
       b.textContent=state.display?'Return to map':'Junction detail';
       b.setAttribute('aria-pressed',String(state.display));
-      b.title='Schematic OSM lane geometry · not verified navigation';
+      const count=e?.selection?.summary?.matchedCount ?? 0;
+      b.title=count
+        ? count+' reconstructed shapes near route · exact lane unverified'
+        : 'Schematic OSM road geometry · exact lanes not established';
     }
   }
   function updateAppearance(){
@@ -141,7 +163,7 @@ export function createJunctionDetail({
       if(state.display && e?.data){
         styleLayers(m);
         if(state.currentKey!==junctionCacheKey(state.target.position)){
-          assign(m,e.data);
+          assign(m,e.data,e.selection);
           state.currentKey=junctionCacheKey(state.target.position);
         }
         show(m,true);
@@ -181,7 +203,8 @@ export function createJunctionDetail({
         const xml=await downloadJunction(next.position);
         const data=await reconstruct(xml);
         if(generation!==state.generation)return;
-        state.cache.set(key,{data,status:'ready'});
+        const selection=partitionJunctionGeometry(data,state.route,next.offset);
+        state.cache.set(key,{data,selection,status:'ready'});
         if(state.cache.size>MAX_CACHE)state.cache.delete(state.cache.keys().next().value);
         state.reason='ready';
       }catch(error){
@@ -282,6 +305,7 @@ export function createJunctionDetail({
     info:()=>({
       targetCount:state.targets.length,
       ready:!!entry()?.data,
+      routeNearbyShapes:entry()?.selection?.summary?.matchedCount||0,
       reason:state.reason,active:state.display,
       requesting:state.inflight
     })

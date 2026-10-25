@@ -58,7 +58,7 @@ assert.ok(main.includes("junctionDetail?.begin(selectedRoute())") &&
   main.includes("junctionDetail?.update(offset)") &&
   main.includes("junctionDetail?.stop()"),
   'Simulation lifecycle must own the junction controller');
-assert.ok(main.includes('zoom:detail?18.1:15.65'),
+assert.ok(main.includes('zoom:detail?18.25:15.65'),
   'Map perspective must smoothly transition to the detailed junction zoom');
 assert.ok(main.includes('event.originalEvent') &&
   main.includes("state.sim.follow=false"),
@@ -73,4 +73,14 @@ assert.ok(view.includes("state.pendingTimer=setTimeout") &&
   view.includes("state.inflight"),
   'The next junction should be queued once if the source is temporarily busy');
 assert.ok(pkg.scripts.build.includes('smoke-osm2streets.mjs'));
+assert.ok(view.includes('partitionJunctionGeometry(data,state.route,next.offset)') &&
+  view.includes('assign(m,e.data,e.selection)'),
+  'Junction geometry must be partitioned around the provider route before drawing');
+assert.ok(view.includes("const FOCUS_SOURCE='glide-junction-focus'") &&
+  view.includes("'fill-opacity':.075") &&
+  view.includes("'fill-opacity':.205"),
+  'Context arms should be subdued relative to route-adjacent lane shapes');
+assert.ok(main.includes('junctionFocus?2.6:3.4') &&
+  main.includes('do NOT snap it to an inferred lane'),
+  'Detailed view should keep a narrow road-level path without invented lane snapping');
 console.log('Glide progressive junction prefetch, zoom and lifecycle tests passed.');

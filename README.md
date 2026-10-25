@@ -343,3 +343,34 @@ The prior full-route public Overpass lookup is no longer automatically
 launched by route planning.
 
 The system remains a stationary simulation, not safe for actual driving.
+
+## Selective junction geometry / route proximity visualization
+
+As the next visual refinement of the contextual junction preview,
+`src/junction-focus.js` classifies osm2streets geometry relative to a
+330-metre window of the actual TomTom route around the next maneuver:
+
+- Lane **polygon centroids within 22 m** of the route geometry are
+  *visually emphasized* in muted silver-steel; other reconstructed roads
+  remain dim contextual shapes. Nearby road markings within 20 m are
+  shown without rendering all unrelated arrows.
+- The route itself remains the original TomTom polyline. In detailed
+  junction mode it uses a thinner silver trace with almost no glow and
+  a muted trail behind the simulated vehicle.
+- No additional data requests are made. Geometry classification happens
+  once after preparing each junction and is cached.
+- Matching a polygon by proximity is not identifying the correct driving
+  lane or verifying whether a specific lane can turn into an exit lane.
+  Therefore **none of the reconstructed polygons modify navigation
+  instructions or lane recommendations**. They are schematic context
+  to make junction layouts legible.
+
+A complete global lane continuity graph must eventually reconcile
+legal road-to-lane connectivity, turning restrictions, lane-end merges
+and trustworthy source confidence before any lane-level path can be
+offered as instruction. The preliminary focus is deliberately only
+a display-level spatial match.
+
+Tests: `scripts/check-junction-focus.mjs` validates emphasis,
+background filtering, near-route markings, missing route and source
+immutability.

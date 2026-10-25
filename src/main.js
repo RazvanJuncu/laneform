@@ -360,10 +360,19 @@ function drawRoutes() {
     );
     // The traveled section is a matte graphite line. No halo, shadow,
     // platinum core or extra trail; only the road ahead is illuminated.
-    if (traveled.length >= 2) stroke([traveled], '#73818B', 3.4, .63);
+    const junctionFocus=junctionDetail?.active()===true;
+    if (traveled.length >= 2)
+      stroke([traveled], '#73818B', junctionFocus?2.6:3.4, junctionFocus?.46:.63);
     if (remaining.length >= 2) {
-      stroke([remaining], ROUTE_HALO, 7.5, .14, 5);
-      stroke([remaining], SIGNAL, 5.2, .99);
+      // Junction-scale geometry is now legible. Keep the road-level route
+      // as a narrow silver trace; do NOT snap it to an inferred lane.
+      if(junctionFocus){
+        stroke([remaining],ROUTE_HALO,4.4,.09,2);
+        stroke([remaining],SIGNAL,3.1,.93);
+      }else{
+        stroke([remaining], ROUTE_HALO, 7.5, .14, 5);
+        stroke([remaining], SIGNAL, 5.2, .99);
+      }
     }
     return;
   }
@@ -883,7 +892,7 @@ function navCamera(p,immediate=false){
     : {top:Math.round(h*.40),bottom:Math.round(h*.12),left:0,right:0};
   state.map.easeTo({
     center:detail||p.point,bearing:p.angle,
-    pitch:detail?43:59,zoom:detail?18.1:15.65,
+    pitch:detail?38:59,zoom:detail?18.25:15.65,
     padding,duration:immediate?MOTION:(isReducedMotion ? 0 : 980)
   });
 }
