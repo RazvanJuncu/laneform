@@ -71,8 +71,9 @@ assert.ok(css.includes('.search-sheet .result-donut'),
 assert.ok(js.includes("ring.className = 'result-donut'"),
   'Search result pin glyph must use donut rings');
 assert.ok(js.includes('splitPathByDistance(') &&
-  js.includes("if (traveled.length >= 2) stroke([traveled], '#73818B'"),
-  'Simulated route must show an unlit, gray traveled segment');
+  js.includes("stroke([traveled], '#73818B'") &&
+  js.includes("junctionFocus?2.6:3.4"),
+  'Simulated route must keep a non-glowing gray trail and reduce stroke in junction detail');
 assert.ok(js.includes('requestDraw(); // update the muted traveled route'),
   'Route progress must be redrawn even when camera follow is off');
 assert.ok(js.includes('revealPreviewFromSearch(searchRect)'),
