@@ -316,3 +316,30 @@ suitable for global turn-by-turn lane guidance at scale.
 ## Experimental lane geometry integration
 
 An optional **Street geometry lab** in Preferences lazily loads the real osm2streets WebAssembly engine to reconstruct and overlay lane shapes from small OSM XML extracts. It makes no additional TomTom calls and never promotes reconstructed polygons into authoritative lane advice. See [integration guide](docs/osm2streets-integration.md).
+
+## Integrated progressive junction detail
+
+Glide no longer exposes the previous manual geometry lab in Preferences.
+Instead the route simulator prepares the **next routed junction** ahead of time:
+one small OpenStreetMap map extract, locally reconstructed by the pinned
+osm2streets WebAssembly engine, then cached in memory for nearby preview.
+
+If the schematic data is ready, a near-junction view engages about 270 m
+before that maneuver. The driver can explicitly inspect/exit using the
+**Junction detail** control, zoom in near the junction or zoom out to dismiss
+the detail for that junction. Map gestures suspend automatic camera follow
+so the view does not fight a pinch/wheel gesture. After crossing, Glide
+advances to the next routed turn and prepares it after a 30-second
+request cooldown. No per-frame requests. At most one in-flight area
+request and five cached results; no new TomTom API calls.
+
+This prototype only seeds targets from routed turn instructions, not
+every unannounced straight-through junction or lane split; worldwide
+intersection discovery requires a pre-indexed road graph. Data access
+to the public OSM API is not guaranteed. If a scan fails, Glide
+retains normal routing guidance and never displays a fabricated diagram.
+Reconstructed lanes are **not verified lane-to-lane connectivity**.
+The prior full-route public Overpass lookup is no longer automatically
+launched by route planning.
+
+The system remains a stationary simulation, not safe for actual driving.

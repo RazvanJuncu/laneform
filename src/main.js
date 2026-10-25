@@ -10,7 +10,7 @@ import { fetchOsmLaneWays } from './osm-lane-source.js';
 import { deriveOsmLaneRecords } from './osm-lane-geometry.js';
 import { laneEventsFromCorridor, buildLaneTimeline, chooseLaneLookahead }
   from './lane-lookahead.js';
-import {wireGeometryLab,setLabVisibility} from './street-geometry-lab.js';
+import {createJunctionDetail} from './junction-detail.js';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 
@@ -28,6 +28,7 @@ const SEARCH_GAP = 8000;
 const RECENT_LIMIT = 5;
 const isReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const MOTION = isReducedMotion ? 0 : 930;
+let junctionDetail=null;
 const state = {
   map: null, mapReady: false, mode: 'idle',
   key: '', query: '', destinationName: '', destination: null,
@@ -120,8 +121,7 @@ function setMode(mode) {
   $('previewSheet').hidden = mode !== 'preview';
   $('navHUD').hidden = mode !== 'navigation';
   $('navBar').hidden = mode !== 'navigation';
-  $('geometryInspectHUD').hidden = mode !== 'inspection';
-  setLabVisibility(state.map,mode === 'inspection');
+  if(mode!=='navigation')junctionDetail?.stop();
   $('settingsPanel').hidden = true;
   $('recenter').title = mode === 'navigation' ? 'Follow simulated vehicle' : 'Recenter map';
   if (mode !== 'navigation') $('laneGuidance').hidden = true;
@@ -149,6 +149,14 @@ function initMap() {
     requestDraw();
   });
   map.on('move', requestDraw);
+  map.on('zoomstart',event=>{
+    // A deliberate pinch/wheel zoom takes precedence over camera following.
+    if(event.originalEvent && state.mode==='navigation'){
+      state.sim.follow=false;
+      $('navFollow').classList.remove('selected');
+      $('navFollow').setAttribute('aria-pressed','false');
+    }
+  });
   map.on('resize', requestDraw);
   map.on('moveend', () => {
     updateTrafficVisibility();
@@ -266,8 +274,9 @@ function updateLaneCoverage() {
   } else osmText='OSM: not yet checked.';
   $('laneCoverage').textContent=route
     ? 'TomTom: '+tomtom+' lane-guided maneuvers / '+total+
-      ' instructions ('+raw+' raw lane sections). '+osmText+
-      ' OSM arrows are unverified road markings, not lane connectivity.'
+      ' instructions ('+raw+' raw lane sections). '+
+      'Additional junction geometry is prepared individually during route simulation. '+
+      'Reconstructed geometry is unverified, not lane-to-lane navigation.'
     : 'Lane sources appear after route planning.';
   const retry=$('retryLaneLookup');
   if(retry){
@@ -759,7 +768,12 @@ async function planRoute(force = false, chosenPlace = null) {
     overview();
     revealPreviewFromSearch(searchRect);
     updateTrafficVisibility();
-    startOsmLaneLookup();
+    // Public Overpass cannot support background lane requests at scale.
+    // The simulation now prepares only the next junction geometry on demand.
+    state.osmStatus='not-checked';
+    state.osmWays=[];state.osmRawWays=0;state.osmProvider='';
+    state.osmCoverageMeters=0;
+    updateLaneCoverage();
   } catch (error) {
     console.error('Glide routing:',error);
     toast('Route unavailable: '+(error.message||'check routing access'),true);
@@ -901,14 +915,18 @@ function renderLaneAssistance(laneData){
   panel.hidden=false;
 }
 function navCamera(p,immediate=false){
-  if(!state.sim.follow||!state.map)return;
+  if(!state.sim.follow||!state.map||!p)return;
   const now=performance.now();
   if(!immediate && now-state.sim.lastCamera<720)return;
   state.sim.lastCamera=now;
   const h=window.innerHeight;
-  const padding={top:Math.round(h*.40),bottom:Math.round(h*.12),left:0,right:0};
+  const detail=junctionDetail?.active() && junctionDetail.position();
+  const padding=detail
+    ? {top:Math.round(h*.25),bottom:Math.round(h*.18),left:0,right:0}
+    : {top:Math.round(h*.40),bottom:Math.round(h*.12),left:0,right:0};
   state.map.easeTo({
-    center:p.point,bearing:p.angle,pitch:59,zoom:15.65,
+    center:detail||p.point,bearing:p.angle,
+    pitch:detail?43:59,zoom:detail?18.1:15.65,
     padding,duration:immediate?MOTION:(isReducedMotion ? 0 : 980)
   });
 }
@@ -943,6 +961,7 @@ function navHud(){
     nextManeuver:nextState,instructions
   });
   renderLaneAssistance(laneData);
+  junctionDetail?.update(offset);
 }
 function positionSim(meters,forceCamera=false){
   const sim=state.sim;
@@ -969,6 +988,7 @@ function startNavigationDemo(){
   sim.marker=new Marker({element:icon,rotationAlignment:'map'}).setLngLat(path.points[0]).addTo(state.map);
   state.routeMarkers.forEach(marker=>marker.getElement().style.display='none');
   setMode('navigation');
+  junctionDetail?.begin(selectedRoute());
   $('navPlay').textContent='Play';
   $('navFollow').classList.add('selected');
   $('navFollow').setAttribute('aria-pressed','true');
@@ -1009,6 +1029,7 @@ function stopNavigationDemo(){
   state.sim.marker?.remove();
   state.sim.marker=null;
   state.sim.active=false;
+  junctionDetail?.stop();
   state.routeMarkers.forEach(marker=>marker.getElement().style.display='');
   setMode('preview');
   overview();
@@ -1059,7 +1080,21 @@ function attachEvents() {
   $('apiKey').addEventListener('keydown',event=>{if(event.key==='Enter')saveKey();});
   $('trafficToggle').addEventListener('change',updateTrafficVisibility);
   $('retryLaneLookup').addEventListener('click',()=>startOsmLaneLookup({force:true}));
-  wireGeometryLab(()=>state.map,setMode);
+  junctionDetail=createJunctionDetail({
+    mapGetter:()=>state.map,
+    buttonGetter:()=>$('junctionToggle'),
+    onViewChange:()=>{
+      if(state.sim.active && state.sim.follow)
+        navCamera(along(state.sim.distance),true);
+    },
+    onButtonAction:()=>{
+      if(!state.sim.active)return;
+      state.sim.follow=true;
+      $('navFollow').classList.add('selected');
+      $('navFollow').setAttribute('aria-pressed','true');
+      navCamera(along(state.sim.distance),true);
+    }
+  });
   $('backToPlanning').addEventListener('click',()=>{
     // Keep the calculated route in memory, but hide it during a new search.
     state.routeMarkers.forEach(x=>x.getElement().style.display='none');
