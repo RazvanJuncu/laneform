@@ -293,7 +293,7 @@ function updateLaneCoverage() {
         : status==='unavailable'?'Lane lookahead · '+tt+' · OSM unavailable'
         : status==='rate-limited'?'Lane lookahead · '+tt+' · OSM deferred'
         : status==='too-large'?'Lane lookahead · '+tt+' · OSM scan too large'
-        : 'Lane lookahead · '+tt+' · OSM not checked';
+        : 'Lane lookahead · '+tt+' · junction geometry prepares during simulation';
     preview.title=route
       ? 'Only completed OSM scans have a meaningful match count. '+
         'Mapped turn arrows are not verified lane connections.'
@@ -1079,7 +1079,6 @@ function attachEvents() {
   $('saveKey').addEventListener('click',saveKey);
   $('apiKey').addEventListener('keydown',event=>{if(event.key==='Enter')saveKey();});
   $('trafficToggle').addEventListener('change',updateTrafficVisibility);
-  $('retryLaneLookup').addEventListener('click',()=>startOsmLaneLookup({force:true}));
   junctionDetail=createJunctionDetail({
     mapGetter:()=>state.map,
     buttonGetter:()=>$('junctionToggle'),
