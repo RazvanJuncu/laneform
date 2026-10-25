@@ -416,3 +416,41 @@ restrictions, and centralized usage and billing alerts.
 
 Source: https://docs.tomtom.com/pricing and
 https://docs.tomtom.com/platform/documentation/status-and-support/faqs
+
+## Junction rendering: replaced basemap roads + provisional lane traces
+
+The detailed geometry mode now **removes the original OpenFreeMap
+transportation line layers** (`highway_*` drawn from vector tiles) while
+osm2streets' lane polygons/markings are visible. It leaves other map layers
+(buildings, greenspace, water, place labels and street names) intact and
+restores the exact original road-layer visibility upon exit, style change
+or route-state transition. This is visual switching, not a tile-source
+reload or additional API request.
+
+`src/lane-path-candidates.js` starts the route-to-lane association needed
+for proper future lane paths:
+- osm2streets' **lane polygons** are enriched with road ID, lane index,
+  lane type, and `allowed_turns` metadata;
+- only `Driving` lane polygons whose mapped turn markings match the
+  next actual TomTom maneuver are considered;
+- locally perpendicular route cross-sections reconstruct a *provisional
+  center trace* inside a matching lane polygon; at least four consecutive
+  samples (approximately 27 metres) are necessary;
+- nearby unrelated roads, bus-only lanes, missing/contradictory turn
+  markings, very wide lane intervals and ambiguous large candidate sets
+  do not create lane traces;
+- **candidate traces stop roughly 22 metres before the intersection**.
+  They are dashed steel-blue; the original TomTom road-centerline becomes
+  subdued while alternatives are visible. No invented lane connector is
+  drawn through the junction.
+
+These paths are **geometry and marking hypotheses, not safe lane
+recommendations**. OSM may have stale, incorrect or missing lane tags.
+The next work item is to align street-network road direction, verify
+possible lane-to-lane movement connectivity and restrictions, and
+propagate admissible lane choices across consecutive intersections.
+
+No additional TomTom or OSM network calls were added. Candidate paths are
+calculated once from already reconstructed cached geometry.
+
+Regression coverage: `scripts/check-lane-traces.mjs`.

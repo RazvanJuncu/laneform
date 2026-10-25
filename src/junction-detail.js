@@ -300,6 +300,7 @@ export function createJunctionDetail({
   return {
     begin,stop,update,toggle,
     active:()=>state.display,
+    candidateCount:()=>entry()?.candidates?.features?.length||0,
     position:()=>state.target?.position||null,
     currentTarget:()=>state.target,
     info:()=>({

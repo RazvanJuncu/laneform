@@ -401,8 +401,14 @@ function drawRoutes() {
       // Junction-scale geometry is now legible. Keep the road-level route
       // as a narrow silver trace; do NOT snap it to an inferred lane.
       if(junctionFocus){
-        stroke([remaining],ROUTE_HALO,4.4,.09,2);
-        stroke([remaining],SIGNAL,3.1,.93);
+        // Where tagged, route-aligned candidate lane traces exist, reduce the
+        // ROAD-level centerline to context. They never connect across the
+        // intersection without validated lane-to-lane connectivity.
+        const candidates=junctionDetail?.candidateCount()||0;
+        stroke([remaining],ROUTE_HALO,candidates?2.3:4.4,
+          candidates?.055:.09,2);
+        stroke([remaining],SIGNAL,candidates?1.55:3.1,
+          candidates?.40:.93);
       }else{
         stroke([remaining], ROUTE_HALO, 7.5, .14, 5);
         stroke([remaining], SIGNAL, 5.2, .99);
