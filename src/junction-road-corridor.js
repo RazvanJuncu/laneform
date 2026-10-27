@@ -129,6 +129,20 @@ function laneSide(instruction,lookahead,d){
   }
   return null;
 }
+function laneTypeLabel(p){
+  const raw=p.type??p.lane_type??p.laneType??p.lt??null;
+  if(typeof raw==='string')return raw.toLowerCase().replace(/[^a-z]/g,'');
+  if(raw&&typeof raw==='object')
+    return Object.keys(raw).join('').toLowerCase().replace(/[^a-z]/g,'');
+  return '';
+}
+function laneDirection(raw){
+  const s=String(raw??'').trim().toLowerCase();
+  if(['forward','fwd','forwards','along','with'].includes(s))return 'Forward';
+  if(['backward','backwards','bwd','reverse','against'].includes(s))
+    return 'Backward';
+  return null;
+}
 function choice(candidates,prev,prefer,turn){
   // The current route direction lies on the right side of a two-way street
   // (right-hand traffic). Group opposite-direction lanes separately.
@@ -222,13 +236,15 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
   const diagnostics={
     inputPolygons:Array.isArray(lanes)?lanes.length:0,
     schemaSamples:Array.isArray(lanes)
-      ?lanes.slice(0,5).map(f=>({
-        type:f?.properties?.type??null,
-        direction:f?.properties?.direction??null,
-        road:f?.properties?.road??null,
-        index:f?.properties?.index??null
+      ?lanes.slice(0,12).map(f=>({
+        keys:Object.keys(f?.properties||{}),
+        type:f?.properties?.type??f?.properties?.lane_type??null,
+        direction:f?.properties?.direction??f?.properties?.dir??null,
+        road:f?.properties?.road??f?.properties?.road_id??null,
+        index:f?.properties?.index??f?.properties?.lane_index??null
       })):[],
-    eligibleDrivingPolygons:0,crossSections:0,
+    rejected:{type:0,geometry:0,road:0,index:0,direction:0},
+    inferredDirectionPolygons:0,eligibleDrivingPolygons:0,crossSections:0,
     matchedSamples:0,continuousSections:0,approachSamples:0
   };
   const result={status:'unavailable',path:empty(),coverage:[],samples:0,
@@ -241,23 +257,36 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
   const from=Math.max(0,(offset-radius)*scale);
   const until=Math.min(profile.length,(offset+radius)*scale);
   if(until-from<12)return result;
-  const driving=lanes.flatMap(feature=>{
+  const driving=lanes.flatMap((feature,ordinal)=>{
     const p=feature?.properties||{};
-    if(!['driving','drive'].includes(String(p.type).toLowerCase()))return [];
-    const index=Number(p.index);
-    const code=String(p.direction||'').toLowerCase();
-    const direction=code==='forward'?'Forward':
-      code==='backward'?'Backward':null;
-    // Road identifiers are opaque IDs in osm2streets, and may be serialized
-    // as strings in some versions. Never require a numeric ID just to draw.
-    const road=typeof p.road==='string'?p.road.trim():p.road;
-    const validRoad=(typeof road==='string'&&road.length>0&&road.length<=100)||
-      Number.isInteger(road);
-    if(!direction||!Number.isInteger(index)||index<0||index>50||
-      !validRoad)return [];
+    const label=laneTypeLabel(p);
+    // Never use unclassified lane polygons; they may be sidewalks or cycleways.
+    if(!['driving','drive','motorvehicle','motorcar','vehicular'].includes(label)){
+      diagnostics.rejected.type++;return [];
+    }
     const edges=ringSegments(feature);
-    return edges.length<3?[]:[{
-      feature,edges,road,index,direction,
+    if(edges.length<3){diagnostics.rejected.geometry++;return [];}
+    let rawRoad=p.road??p.road_id??p.roadId??null;
+    if(rawRoad===null&&Array.isArray(p.osm_way_ids)&&p.osm_way_ids.length)
+      rawRoad='way:'+String(p.osm_way_ids[0]);
+    const knownRoad=(typeof rawRoad==='string'&&rawRoad.length>0&&
+      rawRoad.length<=100)||Number.isInteger(rawRoad);
+    if(!knownRoad)diagnostics.rejected.road++;
+    const road=knownRoad?rawRoad:'unmapped:'+ordinal;
+    const rawIndex=p.index??p.lane_index??p.laneIndex;
+    const numericIndex=Number(rawIndex);
+    const indexed=rawIndex!==undefined&&rawIndex!==null&&
+      Number.isInteger(numericIndex)&&numericIndex>=0&&numericIndex<=50;
+    if(!indexed)diagnostics.rejected.index++;
+    const index=indexed?numericIndex:0;
+    const explicitDirection=laneDirection(p.direction??p.dir??p.travel_direction);
+    if(!explicitDirection){diagnostics.rejected.direction++;
+      diagnostics.inferredDirectionPolygons++;}
+    const direction=explicitDirection||'Inferred';
+    return [{feature,edges,road,index,direction,
+      // A geometry-only inference may be shown on the map, but must never
+      // generate a lane-count HUD claim without matching source metadata.
+      hudEligible:!!explicitDirection&&knownRoad&&indexed,
       turns:Array.isArray(p.allowed_turns)
         ?p.allowed_turns.map(t=>String(t).toLowerCase()):[]
     }];
@@ -265,8 +294,9 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
   diagnostics.eligibleDrivingPolygons=driving.length;
   if(!driving.length){
     result.reason=lanes.length
-      ?'Reconstructed polygons have no usable directional driving-lane metadata'
+      ?'No drivable lane polygons recognized in the osm2streets export'
       :'No reconstructed lane polygons were returned';
+    console.warn('Glide lane schema mismatch',diagnostics);
     return result;
   }
   const sampled=[];
@@ -283,7 +313,8 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
     for(const f of driving){
       for(const c of crossSection(p,tangent,f.edges,f.feature)){
         candidates.push({...c,road:f.road,index:f.index,
-          direction:f.direction,turns:f.turns});
+          direction:f.direction,turns:f.turns,
+          hudEligible:f.hudEligible});
       }
     }
     diagnostics.crossSections+=candidates.length;
@@ -297,7 +328,8 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
     }else if(match){
       sampled.push({d,point:match.point,road:match.road,
         direction:match.direction,index:match.index,
-        laneOrdinal:match.laneOrdinal,laneCount:match.laneCount});
+        laneOrdinal:match.laneOrdinal,laneCount:match.laneCount,
+        hudEligible:match.hudEligible});
       prev=match;
       diagnostics.matchedSamples++;
     }else{
@@ -353,7 +385,8 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
     // Sample before the maneuver, away from the intersection's turning gap.
     for(const sample of part){
       const at=sample.d/scale;
-      if(Number.isInteger(sample.laneCount)&&sample.laneCount>=1&&
+      if(sample.hudEligible===true&&
+        Number.isInteger(sample.laneCount)&&sample.laneCount>=1&&
         Number.isInteger(sample.laneOrdinal)&&
         sample.laneOrdinal>=0&&sample.laneOrdinal<sample.laneCount &&
         at>=offset-115&&at<=offset-12){
