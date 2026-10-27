@@ -31,8 +31,8 @@ function ringSegments(feature){
 }
 function cross(a,b){return a[0]*b[1]-a[1]*b[0];}
 function crossSection(point,tangent,segments){
-  const heading=toMeters([0,0],[tangent[0],tangent[1]]);
-  // A tiny coordinate difference is a displacement, not an absolute coordinate.
+  const heading=[tangent[0]*111320*Math.cos(point[1]*RAD),
+    tangent[1]*110540];
   const length=Math.hypot(...heading);
   if(length<.15)return [];
   const normal=[-heading[1]/length,heading[0]/length]; // positive = driver's left
