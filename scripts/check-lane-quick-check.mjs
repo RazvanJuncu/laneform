@@ -61,4 +61,11 @@ assert.equal(panel.children.length,1,
   'Do not render placeholder or invented recommendation squares');
 render(null,{status:'loading',description:'Preparing reconstructed lanes'});
 assert.match(panel.children[0].textContent,/reconstructing lanes/);
+render(null,{status:'trajectory-only',
+  description:'Mapped trajectory exists but the approach lane count is uncertain'});
+assert.equal(panel.hidden,false);
+assert.equal(panel.children.length,1,
+  'A trajectory without a reliable lane count must not invent squares');
+assert.match(panel.children[0].textContent,/inferred path · lanes uncertain/,
+  'Show visible Glide path as inferred, not incorrectly road-level');
 console.log('Glide arrowless lane HUD and corridor selection sync tests passed.');
