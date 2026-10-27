@@ -420,6 +420,14 @@ export function createJunctionDetail({
         description:e?.status==='unavailable'
           ?'OSM lane geometry unavailable':'Preparing reconstructed lanes'};
       if(e.corridor?.recommendation)return null;
+      // A map may already have an inferred lane trajectory without knowing
+      // the number/order of approach lanes. Do not incorrectly call that
+      // a road-level (TomTom-only) route in the HUD.
+      if(e.corridor?.status==='provisional')return {
+        status:'trajectory-only',
+        description:e.corridor.reason||
+          'Mapped trajectory available, approach lane count unavailable'
+      };
       return {
         status:'road-level',
         description:e.corridor?.reason||
