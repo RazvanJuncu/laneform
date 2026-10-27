@@ -4,11 +4,11 @@ import { Map as MapLibreMap, Marker, LngLatBounds, setWorkerUrl } from 'maplibre
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import mapStyle from './glide-map-style.json';
 import { splitPathByDistance } from './route-progress.js';
-import { extractRouteLaneGuidance, upcomingLaneGuidance, LANE_ARROWS } from './lane-assist.js';
+import { extractRouteLaneGuidance, upcomingLaneGuidance } from './lane-assist.js';
 import { nextManeuverState, arrivalApproachText } from './maneuver-guidance.js';
 
 import { deriveOsmLaneRecords } from './osm-lane-geometry.js';
-import { laneEventsFromCorridor, buildLaneTimeline, chooseLaneLookahead }
+import { laneEventsFromCorridor, buildLaneTimeline }
   from './lane-lookahead.js';
 import {createJunctionDetail} from './junction-detail.js';
 import {MAX_TRAFFIC_TILE_ATTEMPTS,EMPTY_TRAFFIC_TILE,isTomTomTrafficTile,
@@ -965,43 +965,40 @@ function turnLabel(instruction){
 }
 function renderLaneAssistance(laneData){
   const panel=$('laneGuidance');
-  // Missing/unreliable provider data? Show ordinary turn guidance instead.
   panel.replaceChildren();
   panel.hidden=true;
-  if(!['tomtom','osm'].includes(laneData?.source) || !Array.isArray(laneData.lanes))return;
+  // One authoritative visual model: these are the exact lane indices chosen
+  // for the geometry-first path painted in Junction Detail. Never substitute
+  // TomTom arrows or contradictory second-source recommendations.
+  if(laneData?.source!=='glide'||laneData.status!=='inferred'||
+    !Number.isInteger(laneData.laneCount)||laneData.laneCount<1||
+    laneData.laneCount>9||!Array.isArray(laneData.selected)||
+    !laneData.selected.length)return;
+  const selected=new Set(laneData.selected);
+  if([...selected].some(i=>!Number.isInteger(i)||i<0||
+    i>=laneData.laneCount))return;
   const info=document.createElement('span');
   info.className='lane-source';
-  const lead=laneData.distanceToManeuver?
-    distance(laneData.distanceToManeuver)+' ahead':'Approaching';
-  info.textContent=laneData.source==='osm'
-    ? (laneData.kind==='continuity' && laneData.movement==='STRAIGHT'
-      ? 'Straight-arrow lanes · ' : 'Mapped turn arrows · ')+
-        lead+' · OSM (unverified)'
-    : 'Suggested lanes · '+lead+' · TomTom';
+  const ahead=Number(laneData.distanceToManeuver);
+  info.textContent='Suggested lanes · '+
+    (Number.isFinite(ahead)?distance(Math.max(0,ahead))+' ahead · ':'')+
+    'Glide (inferred)';
   const rail=document.createElement('div');
-  rail.className='lane-rail';
-  rail.setAttribute('aria-label','Recommended lane directions, left to right');
-  for(const lane of laneData.lanes){
-    const cell=document.createElement('div');
-    cell.className='lane-cell'+(lane.recommended?' recommended':'')+
-      (laneData.source==='osm'?' osm-markings':'');
-    cell.setAttribute('aria-label',lane.recommended
-      ? (laneData.source==='osm'?'Mapped arrow matching turn: ':'Suggested lane: ')+
-        lane.follow.replaceAll('_',' ').toLowerCase()
-      : 'Other marked lane');
-    // A single emphasized route-follow arrow; multiple allowed directions
-    // are not claimed as recommendations.
-    const direction=lane.follow || lane.directions[0];
-    const symbol=document.createElement('span');
-    symbol.setAttribute('aria-hidden','true');
-    symbol.className='lane-arrow';
-    symbol.textContent=LANE_ARROWS[direction] || '↑';
-    cell.append(symbol);
+  rail.className='lane-rail glide-lane-rail';
+  rail.setAttribute('role','img');
+  rail.setAttribute('aria-label',laneData.laneCount+' driving lanes, '+
+    [...selected].map(i=>'lane '+(i+1)+' of '+laneData.laneCount).join(' and ')+
+    ' highlighted. Inferred from reconstructed road geometry.');
+  for(let i=0;i<laneData.laneCount;i++){
+    const cell=document.createElement('span');
+    cell.className='lane-cell glide-lane-cell'+(selected.has(i)?' recommended':'');
+    cell.setAttribute('aria-hidden','true');
     rail.append(cell);
   }
   panel.append(info,rail);
   panel.hidden=false;
 }
+
 function navCamera(p,immediate=false){
   if(!state.sim.follow||!state.map||!p)return;
   const now=performance.now();
@@ -1042,14 +1039,10 @@ function navHud(){
   const expectedArrival=new Date(Date.now()+timeLeft*1000);
   $('navETA').textContent=expectedArrival.toLocaleTimeString('ro-RO',{hour:'2-digit',minute:'2-digit'});
   $('navScrub').value=String(Math.round(fraction*1000));
-  // Anticipate mapped lane changes even when the route continues straight
-  // and TomTom did not generate a maneuver at that intersection.
-  const laneData=chooseLaneLookahead(laneRecords(route),offset,{
-    horizonMeters:1100,minimumMeters:14,
-    nextManeuver:nextState,instructions
-  });
-  renderLaneAssistance(laneData);
+  // Junction Detail and the mini lane HUD share the *same* geometry-based
+  // sample. Geometry readiness is asynchronous; only show known samples.
   junctionDetail?.update(offset);
+  renderLaneAssistance(junctionDetail?.suggestedLanes());
 }
 function positionSim(meters,forceCamera=false){
   const sim=state.sim;
@@ -1187,6 +1180,10 @@ function attachEvents() {
       requestDraw();
       if(state.sim.active && state.sim.follow)
         navCamera(along(state.sim.distance),true);
+    },
+    onGuidanceChange:()=>{
+      if(state.sim.active)
+        renderLaneAssistance(junctionDetail?.suggestedLanes());
     },
     onButtonAction:()=>{
       if(!state.sim.active)return;
