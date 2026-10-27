@@ -342,6 +342,45 @@ function requestDraw() {
     drawRoutes();
   });
 }
+
+// Clip only those provider-route intervals covered by reconstructed lanes.
+// This preserves the rest of the itinerary instead of hiding its entire line.
+function routeOutsideLaneCoverage(sim,start,end,realCoverage,realTotal){
+  if(!Array.isArray(realCoverage)||!realCoverage.length||
+    !Number.isFinite(realTotal)||realTotal<=0)return [];
+  const toSim=sim.length/realTotal;
+  const cut=d=>{
+    const at=Math.max(0,Math.min(sim.length,d));
+    const cum=sim.cumulative,points=sim.points;
+    let lo=1,hi=cum.length-1;
+    while(lo<hi){const mid=(lo+hi)>>1;
+      if(cum[mid]<at)lo=mid+1;else hi=mid;}
+    const k=Math.max(1,lo),span=cum[k]-cum[k-1];
+    const t=span>0?(at-cum[k-1])/span:0;
+    return [points[k-1][0]+(points[k][0]-points[k-1][0])*t,
+      points[k-1][1]+(points[k][1]-points[k-1][1])*t];
+  };
+  const slice=(a,b)=>{
+    if(b-a<.3)return null;
+    const points=[cut(a)];
+    for(let i=1;i<sim.cumulative.length-1;i++)
+      if(sim.cumulative[i]>a && sim.cumulative[i]<b)
+        points.push(sim.points[i]);
+    points.push(cut(b));
+    return points;
+  };
+  const bounds=realCoverage.map(([a,b])=>[
+    Math.max(start,a*toSim),Math.min(end,b*toSim)])
+    .filter(([a,b])=>Number.isFinite(a)&&Number.isFinite(b)&&b>a)
+    .sort((a,b)=>a[0]-b[0]);
+  const outside=[];let cursor=start;
+  for(const [a,b] of bounds){
+    if(a>cursor){const piece=slice(cursor,a);if(piece)outside.push(piece);}
+    cursor=Math.max(cursor,b);
+  }
+  if(cursor<end){const piece=slice(cursor,end);if(piece)outside.push(piece);}
+  return outside;
+}
 function drawRoutes() {
   const map = state.map, canvas = $('routeOverlay');
   if (!map || !state.mapReady || !canvas) return;
@@ -395,14 +434,26 @@ function drawRoutes() {
     // The traveled section is a matte graphite line. No halo, shadow,
     // platinum core or extra trail; only the road ahead is illuminated.
     const junctionFocus=junctionDetail?.active()===true;
-    if (traveled.length >= 2)
-      stroke([traveled], '#73818B', junctionFocus?2.6:3.4, junctionFocus?.46:.63);
+    const laneCoverage=junctionFocus?junctionDetail?.coverage()||[]:[];
+    const realLength=feature.properties?.summary?.lengthInMeters;
+    if(traveled.length>=2){
+      const past=laneCoverage.length
+        ?routeOutsideLaneCoverage(sim,0,sim.distance,laneCoverage,realLength)
+        :[traveled];
+      stroke(past,'#73818B',junctionFocus?2.6:3.4,
+        junctionFocus?.46:.63);
+    }
     if (remaining.length >= 2) {
       // When a mapped lane path is available, the underlying road-center
       // trace must not compete with the lane-level trajectory in detail view.
       // If lane geometry is ambiguous, retain ordinary route guidance.
-      if(junctionFocus && junctionDetail?.hasTrajectory()){
-        // The MapLibre geometry layer now draws the local planned trajectory.
+      if(junctionFocus && laneCoverage.length){
+        // The reconstructed lane line is visible only where we have geometry.
+        // Keep the original route beyond that local window, not underneath it.
+        const outside=routeOutsideLaneCoverage(
+          sim,sim.distance,sim.length,laneCoverage,realLength);
+        stroke(outside,ROUTE_HALO,5,.09,3);
+        stroke(outside,SIGNAL,3.4,.90);
       }else if(junctionFocus){
         // Where tagged, route-aligned candidate lane traces exist, reduce the
         // ROAD-level centerline to context. They never connect across the
