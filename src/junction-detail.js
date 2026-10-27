@@ -153,7 +153,8 @@ function assign(map,data,selection,candidates,ordinal,planner,corridor){
     corridor?.status==='provisional'?corridor.path:EMPTY);
 }
 export function createJunctionDetail({
-  mapGetter,buttonGetter,onViewChange=()=>{},onButtonAction=()=>{}
+  mapGetter,buttonGetter,onViewChange=()=>{},
+  onButtonAction=()=>{},onGuidanceChange=()=>{}
 }={}){
   const state={
     targets:[],target:null,currentKey:null,
@@ -293,6 +294,9 @@ export function createJunctionDetail({
         if(generation===state.generation){
           state.inflight=false;
           updateAppearance();
+          // Data readiness can change while playback is paused. Refresh the
+          // same lane guidance shown on the map without waiting for movement.
+          onGuidanceChange();
           // If the simulation already progressed past this junction while
           // the request ran, prepare the new target after the cooldown.
           if(state.target && junctionCacheKey(state.target.position)!==key)
@@ -318,6 +322,7 @@ export function createJunctionDetail({
     classifyTarget(next,entry());
     ensureNextPrepared();
     updateAppearance();
+    onGuidanceChange();
   }
   function update(progress){
     if(!state.route||!Number.isFinite(progress))return;
@@ -391,6 +396,18 @@ export function createJunctionDetail({
     },
     position:()=>state.target?.position||null,
     currentTarget:()=>state.target,
+    suggestedLanes:()=>{
+      const target=state.target,rec=entry()?.corridor?.recommendation;
+      const ahead=target?.offset-state.progress;
+      // No speculative fallback to provider arrow data. Only return the
+      // exact lane group represented by the reconstructed trajectory.
+      if(!rec||!Number.isFinite(ahead)||ahead<0||ahead>700)return null;
+      if(!Number.isInteger(rec.laneCount)||rec.laneCount<1||
+        rec.laneCount>9||!Array.isArray(rec.selected)||
+        !rec.selected.length||rec.selected.some(i=>
+          !Number.isInteger(i)||i<0||i>=rec.laneCount))return null;
+      return {...rec,distanceToManeuver:ahead};
+    },
     info:()=>({
       targetCount:state.targets.length,
       ready:!!entry()?.data,
@@ -402,6 +419,7 @@ export function createJunctionDetail({
       corridorReason:entry()?.corridor?.reason||'No corridor data',
       corridorSamples:entry()?.corridor?.samples||0,
       corridorCoverage:entry()?.corridor?.coverage||[],
+      hudLaneRecommendation:entry()?.corridor?.recommendation||null,
       plannedLaneSelection:entry()?.planner?.selected||null,
       nextManeuverLookahead:entry()?.planner?.lookahead||null,
       reason:state.reason,active:state.display,
