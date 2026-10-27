@@ -28,8 +28,14 @@ function roadArms(feature){
   if(!Array.isArray(movements))return 0;
   const arms=new Set();
   for(const movement of movements){
-    const match=String(movement).match(/^\s*(\d+)\s*->\s*(\d+)\s*$/);
-    if(match){arms.add(match[1]);arms.add(match[2]);}
+    // osm2streets uses Rust's Display representation of RoadID; releases
+    // may serialize identifiers as "12", "Road #12", or "RoadID(12)".
+    // Requiring bare digits silently missed every normal intersection in
+    // those builds, leaving Cruise without any candidate crossings.
+    const pieces=String(movement).split(/\s*->\s*/);
+    if(pieces.length!==2)continue;
+    const from=pieces[0].trim(),to=pieces[1].trim();
+    if(from&&to){arms.add(from);arms.add(to);}
   }
   return arms.size;
 }
