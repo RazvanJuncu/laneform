@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {cruiseFromMappedLanes} from '../src/lane-cruise.js';
+import {cruiseFromMappedLanes,cruiseFromRouteAlignment} from '../src/lane-cruise.js';
 const lane=(index,turns,{road=41,direction='Forward'}={})=>({
   type:'Feature',
   properties:{type:'Driving',road,index,direction,allowed_turns:turns},
@@ -60,4 +60,33 @@ const left=cruiseFromMappedLanes({
 });
 assert.deepEqual(left.selected,[1],
   'Remain in leftmost through-capable lane for next LEFT turn');
+
+// When OSM omits turn-only markings, an already rendered multi-lane
+// APPROACH can still provide an explicitly provisional lane-alignment hint.
+const alignment=cruiseFromRouteAlignment({
+  corridor:{status:'provisional',recommendation:{
+    source:'glide',status:'inferred',laneCount:3,selected:[0],
+    road:12, direction:'Forward'
+  },diagnostics:{approachSamples:8},
+  path:{features:[{type:'Feature'}]}},
+  distanceToManeuver:315,turnDirection:'left'
+});
+assert.equal(alignment.mode,'alignment');
+assert.deepEqual(alignment.selected,[0]);
+assert.deepEqual(alignment.turnOnly,[],
+  'Geometry-only Cruise must not claim turn-only restrictions');
+assert.match(alignment.reason,/unknown/);
+assert.equal(cruiseFromRouteAlignment({
+  corridor:{status:'provisional',recommendation:{
+    source:'glide',status:'inferred',laneCount:1,selected:[0]},
+    diagnostics:{approachSamples:8},path:{features:[{}]}},
+  distanceToManeuver:315,turnDirection:'left'
+}),null,'Single-lane roads have no meaningful Cruise lane choice');
+assert.equal(cruiseFromRouteAlignment({
+  corridor:{status:'provisional',recommendation:{
+    source:'glide',status:'inferred',laneCount:3,selected:[0]},
+    diagnostics:{approachSamples:1},path:{features:[{}]}},
+  distanceToManeuver:315,turnDirection:'left'
+}),null,'Never recommend from a solitary, unstable lane sample');
+
 console.log('Glide explicit turn-only cruise lane guidance tests passed.');
