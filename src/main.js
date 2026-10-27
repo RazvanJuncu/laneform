@@ -1097,7 +1097,10 @@ function renderCruiseGuidance(cue){
   const note=document.createElement('span');
   note.className='cruise-status';
   note.textContent=(cue.mode==='alignment'
-      ?'Align for next turn · ':'Keep through · ')+
+      ?'Align for next turn · '
+      :cue.mode==='continuity'
+        ?cue.upcomingLaneCount?'Road widens · ':'Lane peels away · '
+        :'Keep through · ')+
     distance(Math.max(0,cue.distanceToJunction))+' ahead';
   const rail=document.createElement('div');
   rail.className='cruise-rail';
@@ -1106,18 +1109,23 @@ function renderCruiseGuidance(cue){
     cue.laneCount+' mapped lanes; suggested lane '+
     (cue.selected[0]+1)+(cue.mode==='alignment'
       ?' (geometric alignment only, earlier turn restrictions unknown).'
-      :' (inferred from OSM turn markings).'));
+      :cue.mode==='continuity'
+        ?' (inferred from longitudinal lane continuation; lane legality unverified).'
+        :' (inferred from OSM turn markings).'));
   for(let i=0;i<cue.laneCount;i++){
     const pill=document.createElement('span');
     pill.className='cruise-pill'+(cue.selected.includes(i)?' recommended':
-      cue.turnOnly?.includes(i)?' turn-only':'');
+      cue.turnOnly?.includes(i)||cue.nonContinuing?.includes(i)
+        ?' turn-only':'');
     pill.setAttribute('aria-hidden','true');
     rail.append(pill);
   }
   panel.append(note,rail);
   panel.title=cue.mode==='alignment'
     ?'Geometric lane alignment for the next routed turn. No turn-only restrictions verified.'
-    :'OSM marks through and turn-only lanes. This is inferred and not your detected vehicle lane.';
+    :cue.mode==='continuity'
+      ?'Repeated OSM lane cross-sections indicate a lane tapers or diverges from the selected route. This is provisional and does not establish legal turn restrictions.'
+      :'OSM marks through and turn-only lanes. This is inferred and not your detected vehicle lane.';
 }
 function navCamera(p,immediate=false){
   if(!state.sim.follow||!state.map||!p)return;
