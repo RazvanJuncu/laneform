@@ -267,7 +267,7 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
     turnAngleDegrees:null
   };
   const result={status:'unavailable',path:empty(),coverage:[],samples:0,
-    recommendation:null,diagnostics,
+    recommendation:null,exitRecommendation:null,diagnostics,
     reason:'No suitable reconstructed driving lane sections'};
   // osm2streets lane polygons do not model ordered entry/circulation/exit
   // transitions through large roundabouts reliably. Reusing the ordinary
@@ -431,7 +431,7 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
         :'Lane samples were too fragmented for a continuous trajectory';
     return result;
   }
-  const features=[],coverage=[],eligibleApproaches=[];
+  const features=[],coverage=[],eligibleApproaches=[],eligibleExits=[];
   for(const part of pieces){
     const beginning=part[0].d/scale,ending=part.at(-1).d/scale;
     // Small orphan lane fragments are useful for OSM debugging, but they
@@ -453,6 +453,15 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
         sample.laneOrdinal>=0&&sample.laneOrdinal<sample.laneCount &&
         at>=offset-165&&at<=offset-8){
         eligibleApproaches.push({...sample,at});
+      }
+      // The second HUD row is sampled from the SAME rendered lane corridor,
+      // this time AFTER the turn, never from a guessed ordinal connection.
+      if(sample.hudEligible===true&&
+        Number.isInteger(sample.laneCount)&&sample.laneCount>=1&&
+        Number.isInteger(sample.laneOrdinal)&&
+        sample.laneOrdinal>=0&&sample.laneOrdinal<sample.laneCount &&
+        at>=offset+14&&at<=offset+115){
+        eligibleExits.push({...sample,at});
       }
     }
   }
@@ -484,8 +493,28 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
       road:first.road,direction:first.direction,
       sampleOffsetMeters:first.at,junctionOffsetMeters:offset}
     :null;
+  // Select the first stable mapped exit, near ~45 m after the maneuver.
+  // Synthetic Bézier points do not carry lane metadata and are excluded.
+  eligibleExits.sort((a,b)=>
+    Math.abs(a.at-(offset+45))-Math.abs(b.at-(offset+45)));
+  let exit=eligibleExits[0]||null;
+  if(exit){
+    const peers=eligibleExits.filter(p=>
+      p.road===exit.road&&p.direction===exit.direction&&
+      Math.abs(p.at-exit.at)<=16);
+    if(peers.filter(p=>p.laneCount===exit.laneCount&&
+      p.laneOrdinal===exit.laneOrdinal).length<Math.min(2,peers.length))
+      exit=null;
+  }
+  const exitRecommendation=exit
+    ?{source:'glide',status:'inferred',laneCount:exit.laneCount,
+      selected:[exit.laneOrdinal],laneIndex:exit.index,
+      road:exit.road,direction:exit.direction,
+      sampleOffsetMeters:exit.at,junctionOffsetMeters:offset}
+    :null;
+  diagnostics.exitSamples=eligibleExits.length;
   return {status:'provisional',path:{type:'FeatureCollection',features},
-    coverage,recommendation,diagnostics,
+    coverage,recommendation,exitRecommendation,diagnostics,
     samples:features.reduce((n,f)=>n+f.geometry.coordinates.length,0),
     reason:recommendation
       ?'Lane corridor and upstream lane selection reconstructed'
