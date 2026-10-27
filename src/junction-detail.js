@@ -135,9 +135,15 @@ function show(map,visible){
   if(!map?.isStyleLoaded?.())return;
   setStreetBasemapHidden(map,visible);
   const v=visible?'visible':'none';
-  for(const id of IDS)if(map.getLayer(id) &&
-    map.getLayoutProperty(id,'visibility')!==v)
-      map.setLayoutProperty(id,'visibility',v);
+  for(const id of IDS){
+    if(!map.getLayer(id))continue;
+    // The main route canvas owns ALL trajectory rendering. Keeping the old
+    // lane line layer visible underneath that canvas caused two competing
+    // path painters with no guaranteed visual precedence.
+    const actual=(id===IDS[8]||id===IDS[9])?'none':v;
+    if(map.getLayoutProperty(id,'visibility')!==actual)
+      map.setLayoutProperty(id,'visibility',actual);
+  }
 }
 function assign(map,data,selection,candidates,ordinal,planner,corridor){
   if(!styleLayers(map))return;
@@ -394,6 +400,15 @@ export function createJunctionDetail({
       const e=entry();
       return e?.corridor?.status==='provisional'?e.corridor.coverage:[];
     },
+    trajectory:()=>{
+      if(!state.display)return null;
+      const corridor=entry()?.corridor;
+      if(corridor?.status!=='provisional')return null;
+      const features=corridor.path?.features||[];
+      if(!features.length||features.length!==corridor.coverage?.length)
+        return null;
+      return {features,coverage:corridor.coverage,source:'glide'};
+    },
     position:()=>state.target?.position||null,
     currentTarget:()=>state.target,
     laneState:()=>{
@@ -431,6 +446,8 @@ export function createJunctionDetail({
       corridorStatus:entry()?.corridor?.status||'unavailable',
       corridorReason:entry()?.corridor?.reason||'No corridor data',
       corridorDiagnostics:entry()?.corridor?.diagnostics||null,
+      trajectoryPainter:'canvas-above-map',
+      mapTrajectoryFeatures:entry()?.corridor?.path?.features?.length||0,
       corridorSamples:entry()?.corridor?.samples||0,
       corridorCoverage:entry()?.corridor?.coverage||[],
       hudLaneRecommendation:entry()?.corridor?.recommendation||null,
