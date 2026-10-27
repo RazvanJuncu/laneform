@@ -1099,18 +1099,25 @@ function renderCruiseGuidance(cue){
       ?'Align for next turn · '
       :cue.mode==='continuity'
         ?cue.upcomingLaneCount?'Road widens · ':'Lane peels away · '
-        :'Keep through · ')+
+        :cue.mode==='available'
+          ?cue.distanceToJunction>15?'More lanes ahead · ':'Lanes available · '
+          :'Keep through · ')+
+    (cue.mode==='available'?cue.laneCount+' lanes · ':'')+
     distance(Math.max(0,cue.distanceToJunction))+' ahead';
   const rail=document.createElement('div');
   rail.className='cruise-rail';
   rail.setAttribute('role','img');
   rail.setAttribute('aria-label',
     cue.laneCount+' mapped lanes; suggested lane '+
-    (cue.selected[0]+1)+(cue.mode==='alignment'
-      ?' (geometric alignment only, earlier turn restrictions unknown).'
-      :cue.mode==='continuity'
-        ?' (inferred from longitudinal lane continuation; lane legality unverified).'
-        :' (inferred from OSM turn markings).'));
+    (cue.selected.length?'suggested lane '+(cue.selected[0]+1):
+      'no preferred lane')+
+    (cue.mode==='available'
+      ?' (mapped lane count only, no confirmed choice).'
+      :cue.mode==='alignment'
+        ?' (geometric alignment only, earlier turn restrictions unknown).'
+        :cue.mode==='continuity'
+          ?' (inferred from longitudinal lane continuation; lane legality unverified).'
+          :' (inferred from OSM turn markings).'));
   for(let i=0;i<cue.laneCount;i++){
     const pill=document.createElement('span');
     pill.className='cruise-pill'+(cue.selected.includes(i)?' recommended':
@@ -1120,11 +1127,13 @@ function renderCruiseGuidance(cue){
     rail.append(pill);
   }
   panel.append(note,rail);
-  panel.title=cue.mode==='alignment'
-    ?'Geometric lane alignment for the next routed turn. No turn-only restrictions verified.'
-    :cue.mode==='continuity'
-      ?'Repeated OSM lane cross-sections indicate a lane tapers or diverges from the selected route. This is provisional and does not establish legal turn restrictions.'
-      :'OSM marks through and turn-only lanes. This is inferred and not your detected vehicle lane.';
+  panel.title=cue.mode==='available'
+    ?'Multiple mapped lanes ahead, but no defensible preferred lane yet.'
+    :cue.mode==='alignment'
+      ?'Geometric lane alignment for the next routed turn. No turn-only restrictions verified.'
+      :cue.mode==='continuity'
+        ?'Repeated OSM lane cross-sections indicate a lane tapers or diverges from the selected route. This is provisional and does not establish legal turn restrictions.'
+        :'OSM marks through and turn-only lanes. This is inferred and not your detected vehicle lane.';
 }
 function navCamera(p,immediate=false){
   if(!state.sim.follow||!state.map||!p)return;
