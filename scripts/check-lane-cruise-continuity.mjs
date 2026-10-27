@@ -53,4 +53,24 @@ const unknown=scan.map(f=>({...f,direction:'Inferred'}));
 assert.equal(cruiseFromLaneContinuity({
   laneFrames:unknown,progress:35
 }),null,'Directionless geometry cannot identify safe branch lane');
+const twoToThreeToTwo=[
+  ...frames([[-4,0],[-4,0],[-4,0]],{start:55,road:2}),
+  ...frames([[-4,0,4],[-4,0,4],[-4,0,4]],{start:130,road:3}),
+  ...frames([[-4,0],[-4,0],[-4,0]],{start:210,road:4})
+];
+const beforeWidening=cruiseFromLaneContinuity({
+  laneFrames:twoToThreeToTwo,progress:15
+});
+assert.equal(beforeWidening?.laneCount,2,
+  'Do not display future 3-lane width where road currently has two lanes');
+assert.equal(beforeWidening?.upcomingLaneCount,3);
+assert.deepEqual(beforeWidening.selected,[1]);
+assert.deepEqual(beforeWidening.nonContinuing,[]);
+const afterWidening=cruiseFromLaneContinuity({
+  laneFrames:twoToThreeToTwo,progress:105
+});
+assert.equal(afterWidening?.laneCount,3,
+  'Reveal three mapped lanes when driver approaches the widened section');
+assert.deepEqual(afterWidening?.nonContinuing,[2]);
+
 console.log('Glide continuous rolling lane topology tests passed.');
