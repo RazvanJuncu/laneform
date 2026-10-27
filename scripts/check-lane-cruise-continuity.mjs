@@ -73,4 +73,14 @@ assert.equal(afterWidening?.laneCount,3,
   'Reveal three mapped lanes when driver approaches the widened section');
 assert.deepEqual(afterWidening?.nonContinuing,[2]);
 
+// Maintain the warning after the widening has been passed; the lane still
+// peels off farther ahead and should remain highlighted until that split.
+const approachingFork=cruiseFromLaneContinuity({
+  laneFrames:twoToThreeToTwo,progress:165
+});
+assert.equal(approachingFork?.laneCount,3);
+assert.deepEqual(approachingFork.nonContinuing,[2]);
+assert.ok(approachingFork.distanceToJunction>0);
+
+
 console.log('Glide continuous rolling lane topology tests passed.');
