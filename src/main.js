@@ -1000,15 +1000,12 @@ function renderLaneAssistance(laneData,laneState=null){
   const panel=$('laneGuidance');
   panel.replaceChildren();
   panel.hidden=true;
-  // One authoritative visual model: these are the exact lane indices chosen
-  // for the geometry-first path painted in Junction Detail. Never substitute
-  // TomTom arrows or contradictory second-source recommendations.
+  // Both rows use the same OSM lane samples as the green route. Never mix
+  // independently inferred HUD arrows from TomTom with Glide's trajectory.
   if(laneData?.source!=='glide'||laneData.status!=='inferred'||
     !Number.isInteger(laneData.laneCount)||laneData.laneCount<1||
     laneData.laneCount>9||!Array.isArray(laneData.selected)||
     !laneData.selected.length){
-    // Never invent lane squares. Make the fallback explicit when the user is
-    // already inspecting a reconstructed Junction Detail.
     if(laneState){
       const note=document.createElement('span');
       note.className='lane-source glide-lane-unavailable';
@@ -1023,28 +1020,46 @@ function renderLaneAssistance(laneData,laneState=null){
     }
     return;
   }
-  const selected=new Set(laneData.selected);
-  if([...selected].some(i=>!Number.isInteger(i)||i<0||
-    i>=laneData.laneCount))return;
+  function laneRow(group,label){
+    if(!group||!Number.isInteger(group.laneCount)||
+      group.laneCount<1||group.laneCount>9||
+      !Array.isArray(group.selected)||!group.selected.length||
+      group.selected.some(i=>!Number.isInteger(i)||i<0||
+        i>=group.laneCount))return null;
+    const stage=document.createElement('div');
+    stage.className='glide-lane-stage';
+    const caption=document.createElement('span');
+    caption.className='glide-lane-stage-label';
+    caption.textContent=label;
+    const rail=document.createElement('div');
+    rail.className='lane-rail glide-lane-rail';
+    rail.setAttribute('role','img');
+    rail.setAttribute('aria-label',label+': '+group.laneCount+
+      ' driving lanes, '+group.selected.map(i=>
+        'lane '+(i+1)+' of '+group.laneCount).join(' and ')+
+      ' highlighted (inferred from OSM).');
+    const selected=new Set(group.selected);
+    for(let i=0;i<group.laneCount;i++){
+      const square=document.createElement('span');
+      square.className='lane-cell glide-lane-cell'+
+        (selected.has(i)?' recommended':'');
+      square.setAttribute('aria-hidden','true');
+      rail.append(square);
+    }
+    stage.append(caption,rail);
+    return stage;
+  }
+  const approach=laneRow(laneData,'Approach');
+  if(!approach)return;
   const info=document.createElement('span');
   info.className='lane-source';
   const ahead=Number(laneData.distanceToManeuver);
   info.textContent='Suggested lanes · '+
     (Number.isFinite(ahead)?distance(Math.max(0,ahead))+' ahead · ':'')+
     'Glide (inferred)';
-  const rail=document.createElement('div');
-  rail.className='lane-rail glide-lane-rail';
-  rail.setAttribute('role','img');
-  rail.setAttribute('aria-label',laneData.laneCount+' driving lanes, '+
-    [...selected].map(i=>'lane '+(i+1)+' of '+laneData.laneCount).join(' and ')+
-    ' highlighted. Inferred from reconstructed road geometry.');
-  for(let i=0;i<laneData.laneCount;i++){
-    const cell=document.createElement('span');
-    cell.className='lane-cell glide-lane-cell'+(selected.has(i)?' recommended':'');
-    cell.setAttribute('aria-hidden','true');
-    rail.append(cell);
-  }
-  panel.append(info,rail);
+  panel.append(info,approach);
+  const after=laneRow(laneData.exit,'After junction');
+  if(after)panel.append(after);
   panel.hidden=false;
 }
 
