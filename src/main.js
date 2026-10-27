@@ -398,9 +398,12 @@ function drawRoutes() {
     if (traveled.length >= 2)
       stroke([traveled], '#73818B', junctionFocus?2.6:3.4, junctionFocus?.46:.63);
     if (remaining.length >= 2) {
-      // Junction-scale geometry is now legible. Keep the road-level route
-      // as a narrow silver trace; do NOT snap it to an inferred lane.
-      if(junctionFocus){
+      // When a mapped lane path is available, the underlying road-center
+      // trace must not compete with the lane-level trajectory in detail view.
+      // If lane geometry is ambiguous, retain ordinary route guidance.
+      if(junctionFocus && junctionDetail?.hasTrajectory()){
+        // The MapLibre geometry layer now draws the local planned trajectory.
+      }else if(junctionFocus){
         // Where tagged, route-aligned candidate lane traces exist, reduce the
         // ROAD-level centerline to context. They never connect across the
         // intersection without validated lane-to-lane connectivity.
@@ -1130,6 +1133,7 @@ function attachEvents() {
     mapGetter:()=>state.map,
     buttonGetter:()=>$('junctionToggle'),
     onViewChange:()=>{
+      requestDraw();
       if(state.sim.active && state.sim.follow)
         navCamera(along(state.sim.distance),true);
     },
