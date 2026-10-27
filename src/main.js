@@ -963,7 +963,7 @@ function turnLabel(instruction){
   else if(maneuver.includes('ROUNDABOUT'))action='Use the roundabout';
   return road ? action+' onto '+road : action+' along the route';
 }
-function renderLaneAssistance(laneData){
+function renderLaneAssistance(laneData,laneState=null){
   const panel=$('laneGuidance');
   panel.replaceChildren();
   panel.hidden=true;
@@ -973,7 +973,21 @@ function renderLaneAssistance(laneData){
   if(laneData?.source!=='glide'||laneData.status!=='inferred'||
     !Number.isInteger(laneData.laneCount)||laneData.laneCount<1||
     laneData.laneCount>9||!Array.isArray(laneData.selected)||
-    !laneData.selected.length)return;
+    !laneData.selected.length){
+    // Never invent lane squares. Make the fallback explicit when the user is
+    // already inspecting a reconstructed Junction Detail.
+    if(laneState){
+      const note=document.createElement('span');
+      note.className='lane-source glide-lane-unavailable';
+      note.textContent=laneState.status==='loading'
+        ?'Glide · reconstructing lanes…'
+        :'Glide · road-level only';
+      note.title=laneState.description||'No lane-level path established';
+      panel.append(note);
+      panel.hidden=false;
+    }
+    return;
+  }
   const selected=new Set(laneData.selected);
   if([...selected].some(i=>!Number.isInteger(i)||i<0||
     i>=laneData.laneCount))return;
@@ -1042,7 +1056,8 @@ function navHud(){
   // Junction Detail and the mini lane HUD share the *same* geometry-based
   // sample. Geometry readiness is asynchronous; only show known samples.
   junctionDetail?.update(offset);
-  renderLaneAssistance(junctionDetail?.suggestedLanes());
+  renderLaneAssistance(junctionDetail?.suggestedLanes(),
+    junctionDetail?.laneState());
 }
 function positionSim(meters,forceCamera=false){
   const sim=state.sim;
@@ -1183,7 +1198,8 @@ function attachEvents() {
     },
     onGuidanceChange:()=>{
       if(state.sim.active)
-        renderLaneAssistance(junctionDetail?.suggestedLanes());
+        renderLaneAssistance(junctionDetail?.suggestedLanes(),
+          junctionDetail?.laneState());
     },
     onButtonAction:()=>{
       if(!state.sim.active)return;
