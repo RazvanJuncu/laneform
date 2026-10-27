@@ -8,6 +8,7 @@ import {smallAreaOsmUrl,MAX_OSM_BYTES,validateOsmXML,
 import {partitionJunctionGeometry} from './junction-focus.js';
 import {simplifiedJunctionGeometry} from './junction-simplified-map.js';
 import {twoStageLaneGuidance} from './lane-hud-model.js';
+import {cruiseFromMappedLanes} from './lane-cruise.js';
 import {sampleImportantThroughJunctions}
   from './junction-straight-sampling.js';
 import {candidateApproachLanePaths,expectedLaneTurn} from './lane-path-candidates.js';
@@ -197,6 +198,30 @@ export function createJunctionDetail({
       ?{kind:'through',offset:straight.offset,corridor:straight.corridor}
       :{kind:'maneuver',offset:target.offset,corridor:e?.corridor};
   }
+  function cruiseHint(){
+    const e=entry(),target=state.target;
+    if(!e?.data||!state.route||!target)return null;
+    // Include explicit TomTom STRAIGHT instructions as through candidates,
+    // plus 3+arm crossings discovered independently from cached osm2streets.
+    const instruction=state.route.properties?.guidance?.instructions?.[target.index];
+    const through=(e.throughGuidance||[]).slice();
+    if(expectedLaneTurn(instruction)==='through'&&e.corridor)
+      through.push({offset:target.offset,corridor:e.corridor});
+    const upcoming=state.targets.map(t=>({
+      offset:t.offset,
+      turn:expectedLaneTurn(
+        state.route.properties?.guidance?.instructions?.[t.index])
+    })).filter(t=>/left|right/.test(t.turn||'')&&
+      t.offset>state.progress);
+    const nearest=upcoming[0];
+    return cruiseFromMappedLanes({
+      laneFeatures:e.data.lanes?.features||[],
+      throughGuidance:through,progress:state.progress,
+      nextTurnOffset:nearest?.offset??null,
+      nextTurnDirection:/left/.test(nearest?.turn||'')?'left':
+        /right/.test(nearest?.turn||'')?'right':null
+    });
+  }
   function usableTrajectory(){
     if(!state.route||!state.target)return null;
     const remaining=state.target.offset-state.progress;
@@ -248,8 +273,9 @@ export function createJunctionDetail({
     cached.throughGuidance=sampleImportantThroughJunctions({
       route:state.route,
       roads:cached.data.roads?.features||[],
-      centerOffset:next.offset,excludeOffsets:exclusions
-    }).slice(0,2).map(straight=>({
+      centerOffset:next.offset,excludeOffsets:exclusions,
+      beforeMeters:300
+    }).slice(-3).map(straight=>({
       ...straight,
       corridor:buildLaneCorridor({
         route:state.route,offset:straight.offset,
@@ -458,6 +484,9 @@ export function createJunctionDetail({
     currentTarget:()=>state.target,
     laneState:()=>{
       if(!state.display||!state.target)return null;
+      if(activeGuidance()?.kind==='through' ||
+        expectedLaneTurn(state.route?.properties?.guidance?.
+          instructions?.[state.target.index])==='through')return null;
       const e=entry();
       if(!e?.data)return {status:e?.status==='unavailable'?'unavailable':'loading',
         description:e?.status==='unavailable'
@@ -478,8 +507,15 @@ export function createJunctionDetail({
           'No reliable local lane trajectory for this junction'
       };
     },
+    cruise:()=>cruiseHint(),
     suggestedLanes:()=>{
       const g=activeGuidance();
+      // Ordinary straight-ahead lanes belong in the compact persistent
+      // CRUISE strip, never duplicate the large turn-preparation HUD.
+      if(g?.kind==='through'||
+        (g?.kind==='maneuver'&&expectedLaneTurn(
+          state.route?.properties?.guidance?.instructions?.[
+            state.target?.index])==='through'))return null;
       const ahead=g?.offset-state.progress;
       // Even a straight-through OSM crossing uses the exact lane corridor
       // drawn on the map; nothing independent is invented for the HUD.
@@ -523,6 +559,7 @@ export function createJunctionDetail({
         corridorStatus:t.corridor?.status||'unavailable'
       }))||[],
       activeGuidanceKind:activeGuidance()?.kind||null,
+      cruiseGuidance:cruiseHint(),
       activeGuidanceOffsetMeters:activeGuidance()?.offset??null,
       plannedLaneSelection:entry()?.planner?.selected||null,
       nextManeuverLookahead:entry()?.planner?.lookahead||null,
