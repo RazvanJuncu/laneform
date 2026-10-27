@@ -83,4 +83,10 @@ assert.ok(view.includes("const FOCUS_SOURCE='glide-junction-focus'") &&
 assert.ok(main.includes('junctionFocus?2.6:3.4') &&
   main.includes('do NOT snap it to an inferred lane'),
   'Detailed view should keep a narrow road-level path without invented lane snapping');
+assert.ok(view.includes('net.toGeojsonPlain()') &&
+  view.includes('buildJunctionOrdinalCandidates('),
+  'Real osm2streets road-level connections must feed provisional lane pairing');
+assert.ok(view.includes('const EXIT_SOURCE=') &&
+  view.includes('map.getSource(EXIT_SOURCE).setData('),
+  'Provisional exit lane segments must be rendered separately, not joined through junction');
 console.log('Glide progressive junction prefetch, zoom and lifecycle tests passed.');

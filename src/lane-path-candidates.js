@@ -127,6 +127,8 @@ export function candidateApproachLanePaths(route,instruction,features){
       type:'Feature',geometry:{type:'LineString',coordinates:longest},
       properties:{
         road:props.road,index:props.index,turn:expected,
+        type:'Driving',direction:props.direction,
+        allowed_turns:normalizeAllowedTurn(props.allowed_turns),
         source:'osm2streets',status:'candidate-only',
         label:'Mapped turn-arrow candidate — not verified lane connectivity'
       }
@@ -135,5 +137,54 @@ export function candidateApproachLanePaths(route,instruction,features){
   // Too many possible lanes is evidence of ambiguity: no confident
   // centerline choice. In that case we show only underlying polygons.
   if(result.features.length>4)return empty();
+  return result;
+}
+
+
+// Outgoing roadway lane traces are needed to compare lane ordinals.
+// This remains geometry-only: an exit lane is NOT proof that an approach
+// lane connects to it. Only the separate road-movement graph may permit an
+// ordinal hypothesis, never a verified connection.
+export function candidateExitLanePaths(route,instruction,features){
+  const result=empty();
+  const total=route?.properties?.summary?.lengthInMeters;
+  const offset=instruction?.routeOffsetInMeters;
+  if(!Number.isFinite(total)||total<=0||!Number.isFinite(offset)||
+    !Array.isArray(features))return result;
+  const profile=routeProfile(route);
+  if(profile.length<50)return result;
+  const scale=profile.length/total;
+  const at=offset*scale;
+  const from=Math.max(0,at+22*scale);
+  const to=Math.min(profile.length,at+113*scale);
+  if(to-from<MIN_SPAN)return result;
+  for(const feature of features){
+    const props=feature?.properties||{};
+    if(String(props.type).toLowerCase()!=='driving' ||
+      !Number.isInteger(props.index)||!Number.isInteger(props.road) ||
+      !['Forward','Backward'].includes(props.direction))continue;
+    const segments=segmentsInPolygon(feature);
+    if(segments.length<3)continue;
+    let trace=[],longest=[];
+    for(let d=from;d<=to;d+=SAMPLE_STEP){
+      const here=positionAtDistance(profile,d);
+      const prev=positionAtDistance(profile,Math.max(0,d-4));
+      const next=positionAtDistance(profile,Math.min(profile.length,d+4));
+      const point=here&&prev&&next?
+        laneCrossSection(here,[next[0]-prev[0],next[1]-prev[1]],segments):null;
+      if(point)trace.push(point);
+      else{if(trace.length>longest.length)longest=trace;trace=[];}
+    }
+    if(trace.length>longest.length)longest=trace;
+    if(longest.length<4||longest.length*SAMPLE_STEP<MIN_SPAN)continue;
+    result.features.push({
+      type:'Feature',geometry:{type:'LineString',coordinates:longest},
+      properties:{
+        type:'Driving',road:props.road,index:props.index,
+        direction:props.direction,allowed_turns:normalizeAllowedTurn(props.allowed_turns),
+        status:'exit-candidate-only'
+      }
+    });
+  }
   return result;
 }

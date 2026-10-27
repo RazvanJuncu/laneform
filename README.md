@@ -454,3 +454,40 @@ No additional TomTom or OSM network calls were added. Candidate paths are
 calculated once from already reconstructed cached geometry.
 
 Regression coverage: `scripts/check-lane-traces.mjs`.
+
+## Provisional ordinal lane continuity — leftmost to leftmost
+
+The junction overlay can now evaluate a conservative left-to-right
+correspondence, the same default drivers use to reason about multi-lane
+junctions. On an approach with two compatible same-direction turn lanes
+and an exit with two compatible same-direction lanes, pair ordinal lane
+positions: **leftmost to leftmost; rightmost to rightmost**. The actual
+lane index order is reversed when osm2streets marks travel as
+`Backward` along an OSM road.
+
+This is deliberately restricted to cases where (a) osm2streets' road
+network includes an explicit road-level movement for the incoming and
+outgoing road, (b) both roads have an unambiguous set of same-direction
+lane candidates with **equal counts**, and (c) the incoming lane's
+mapped arrows permit the maneuver. Mixed-road groups, missing turn
+arrows, lane drops, duplicates and uncertain restrictions fail closed.
+
+`toGeojsonPlain()` provides road/intersection movement metadata.
+`src/lane-continuity.js` computes ordinal proposals, while
+`src/junction-lane-bridge.js` filters candidates against the route
+and road-level connectivity. The exit-lane geometry can be shown as
+another **dashed provisional segment**, never drawn across the
+intersection as if its lane-level connector were verified. Confidence
+is always `heuristic`, never `verified`.
+
+This does **not** identify the driver's actual physical lane, guarantee
+legality or indicate that a pair of lane polygons represents a real
+lane connector. Road-level connectivity, signs, lane-change rules and
+unmapped traffic schemes may override the ordinal heuristic.
+When the evidence is incomplete, Glide keeps the TomTom road route
+and ordinary maneuver instruction; no candidate lane bridge appears.
+
+The logic uses only the already downloaded osm2streets extract and
+existing TomTom route — zero extra network calls. Regression coverage
+includes equal lanes, backwards geometry, missing connectivity,
+turn-only contradictions and lane drops.

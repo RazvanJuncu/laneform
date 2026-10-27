@@ -19,6 +19,11 @@ const network=new lib.JsStreetNetwork(xml,'',{
 try {
   const lanes=JSON.parse(network.toLanePolygonsGeojson());
   const marks=JSON.parse(network.toLaneMarkingsGeojson());
+  const roads=JSON.parse(network.toGeojsonPlain());
+  if(roads?.type!=='FeatureCollection'||!Array.isArray(roads.features))
+    throw Error('Missing road-level intersection and movement network');
+  console.log('osm2streets road network:',roads.features.length,'geometries');
+
   if(lanes?.type!=='FeatureCollection'||!Array.isArray(lanes.features)||
     lanes.features.length===0)throw Error('WASM produced no lane polygons');
   if(marks?.type!=='FeatureCollection'||!Array.isArray(marks.features))
