@@ -81,8 +81,8 @@ function selectOrdinal(count,side){
   if(count<1)return -1;
   if(side==='left')return 0;
   if(side==='right')return count-1;
-  // With no preferred side, choose a stable, near-middle lane.
-  return Math.floor((count-1)/2);
+  // In right-hand traffic, keep right when no upcoming maneuver favors another lane.
+  return count-1;
 }
 function bezierBetween(a,b){
   const start=a.at(-1),end=b[0];
