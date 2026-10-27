@@ -32,7 +32,9 @@ export function repairReturningLaneDetours(samples,{profile,positionAtDistance,
   let i=1;
   while(i<samples.length-2){
     const left=readings[i-1],prev=readings[i-2];
-    if(!left||!prev||Math.abs(left.lateral-prev.lateral)>maxAnchorOffset){
+    if(!left||!prev||!readings[i]||
+      Math.abs(left.lateral-prev.lateral)>maxAnchorOffset||
+      Math.abs(readings[i].lateral-left.lateral)<minDeviation){
       i++;continue;
     }
     // Search for a nearby pair of stable return anchors, allowing up to
