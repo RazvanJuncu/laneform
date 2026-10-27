@@ -86,7 +86,7 @@ function laneCrossSection(center,tangent,segments){
     center[1]+best*normal[1]/110540
   ];
 }
-export function candidateApproachLanePaths(route,instruction,features){
+export function candidateApproachLanePaths(route,instruction,features,{inferUnmarked=false}={}){
   const result=empty();
   const expected=expectedLaneTurn(instruction);
   const total=route?.properties?.summary?.lengthInMeters;
@@ -104,7 +104,10 @@ export function candidateApproachLanePaths(route,instruction,features){
     const props=feature?.properties||{};
     if(String(props.type).toLowerCase()!=='driving')continue;
     if(!Number.isInteger(props.index)||!Number.isInteger(props.road))continue;
-    if(!normalizeAllowedTurn(props.allowed_turns).includes(expected))continue;
+    const turns=normalizeAllowedTurn(props.allowed_turns);
+    // Where turn arrows were mapped, respect them. With no arrows at all,
+    // the driver planner may consider this lane as a provisional candidate.
+    if(!turns.includes(expected) && !(inferUnmarked&&turns.length===0))continue;
     const segments=segmentsInPolygon(feature);
     if(segments.length<3)continue;
     let trace=[],longest=[];
@@ -129,14 +132,14 @@ export function candidateApproachLanePaths(route,instruction,features){
         road:props.road,index:props.index,turn:expected,
         type:'Driving',direction:props.direction,
         allowed_turns:normalizeAllowedTurn(props.allowed_turns),
-        source:'osm2streets',status:'candidate-only',
+        source:'osm2streets',status:turns.length?'candidate-only':'inferred-unmarked',
         label:'Mapped turn-arrow candidate — not verified lane connectivity'
       }
     });
   }
   // Too many possible lanes is evidence of ambiguity: no confident
   // centerline choice. In that case we show only underlying polygons.
-  if(result.features.length>4)return empty();
+  if(result.features.length>(inferUnmarked?18:4))return empty();
   return result;
 }
 
