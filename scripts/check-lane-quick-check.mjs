@@ -43,11 +43,15 @@ assert.deepEqual(approach.children[1].children.map(s=>
   s.className.includes('recommended')),[false,true,false]);
 assert.ok(approach.children[1].children.every(s=>s.children.length===0),
   'Squares must not contain arrows');
-render({...group(2,0),distanceToManeuver:131,widensFrom:1});
+render({...group(2,0),distanceToManeuver:131,
+  widensFrom:1,addedLaneIndices:[0]});
 assert.equal(panel.children[1].children[0].textContent,
   'Approach · widens from 1',
   'Upcoming extra turning lane should be called out rather than implied upstream');
 assert.equal(panel.children[1].children[1].children.length,2);
+assert.equal(panel.children[1].children[1].children[0].textContent,'+');
+assert.ok(panel.children[1].children[1].children[0].className.includes('added-lane'));
+assert.equal(panel.children[1].children[1].children[1].textContent,'');
 render({...group(3,1),distanceToManeuver:110,exit:group(2,0)});
 assert.equal(panel.children.length,3,
   'Both rows appear when the geometry model reveals an exit lane');
