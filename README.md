@@ -163,16 +163,23 @@ lane recommendation is known. In that case it reads
 `Monitoring · lanes unverified`, with no invented lane count or "all clear"
 claim.
 
-Cruise uses existing reconstructed OSM lane polygons and their **explicit**
-`allowed_turns` markings. For a mapped straight-through junction ahead
-(within a 360m horizon), if the same mapped directional road contains both
-an explicitly through-capable lane and an explicitly turn-only lane,
-the strip shows narrow oval lane indicators and highlights one through
-lane. It considers the next routed maneuver after that junction when picking
-among multiple through-capable lanes. If the road ID/direction/index grouping
-is incomplete, conflicting, or all lanes lack reliable turn markings, no
-lane choice is made. Lane counts are not inferred from GPS and Cruise does
-not know the driver's occupied lane.
+Cruise has **two distinguishable levels**. First it uses existing
+reconstructed OSM `allowed_turns` markings at nearby straight-through
+junctions (within a 360m horizon). If the same mapped directional road has
+both explicitly through-capable and turn-only lanes, it highlights a
+through-capable lane and can consider the next routed turn when multiple
+choices exist. If those tags are missing, it does **not** guess a turn-only
+restriction. Instead, when the already visible reconstructed approach lane
+corridor is supported by several samples and has 2+ lanes, it can show a
+muted `Align for next turn` suggestion 170–600m ahead, using that
+corridor's exact selected lane. This is only a geometric preview of a
+routed turn, **not** a promise that the lane stays through preceding
+junctions. Both modes remain inferred; GPS does not detect the user's lane.
+Where neither evidence level exists, it remains neutral.
+
+The crossing detector now accepts actual osm2streets movement IDs that may
+contain prefixes or formatting, instead of only bare numeric IDs; the
+original overly strict parser could fail to discover ANY crossings.
 
 The OSM straight-through detector looks a little further back (up to 300m)
 within the **already cached** next-junction OSM region, and includes a
@@ -184,12 +191,23 @@ actual mapped turn-only conflicts. Files:
 `src/lane-cruise.js`, `scripts/check-lane-cruise.mjs` and
 `scripts/check-lane-cruise-ui.mjs`.
 
-A final sanity pass also rejects sharp mapped lane-route kinks when the chosen
-provider segment is locally straight, leaving provider road-level guidance
-visible through the uncertain part. This reduces the misleading sideways
-green trajectory caused by some clipped OSM intersection polygons.
-See `src/lane-straight-sanity.js` and
-`scripts/check-lane-straight-sanity.mjs`. All lane hints remain provisional
+The new `src/lane-return-filter.js` handles another OSM artifact:
+one to five consecutive lane samples detour sideways and then return to
+the same lateral position while the chosen road is straight. This was not
+covered reliably by the old median filter. It restores the original
+stable lane-centerline geometry and strips HUD eligibility from repaired
+points. It operates both before the junction corner fit and after path
+bridging. The final sanity gate also now runs on straight sections of
+LEFT/RIGHT approaches, not only TomTom STRAIGHT maneuvers; it can split
+unexplained green kinks and leave the road-level route visible.
+Tests: `scripts/check-lane-return-filter.mjs` and
+`scripts/check-lane-straight-sanity.mjs`.
+
+The source-data and Cruise coverage is still limited by the small downloaded
+OSM areas around forthcoming TomTom maneuvers. A neutral Cruise status
+means this prototype has insufficient evidence, not that all lanes are safe.
+For diagnostics inspect `glideJunctionInfo().cruiseDiagnostics` and
+`glideJunctionInfo().corridorDiagnostics.returningDetoursRepaired`. All lane hints remain provisional
 and are **not** independently validated against road signs or markings.
 
 ### Simplified Junction Detail and two-stage lane quick-check
