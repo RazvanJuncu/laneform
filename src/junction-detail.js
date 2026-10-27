@@ -147,8 +147,10 @@ function assign(map,data,selection,candidates,ordinal,planner,corridor){
   map.getSource(JUNCTION_SOURCE).setData(data?.junctions||EMPTY);
   map.getSource(CANDIDATE_SOURCE).setData(candidates||EMPTY);
   map.getSource(EXIT_SOURCE).setData(ordinal?.exits||EMPTY);
+  // Only the geometry-first corridor is displayed as a lane trajectory.
+  // Keep legacy ordinal guesses available for diagnostics, not navigation.
   map.getSource(PATH_SOURCE).setData(
-    corridor?.status==='provisional'?corridor.path:planner?.path||EMPTY);
+    corridor?.status==='provisional'?corridor.path:EMPTY);
 }
 export function createJunctionDetail({
   mapGetter,buttonGetter,onViewChange=()=>{},onButtonAction=()=>{}
@@ -205,21 +207,17 @@ export function createJunctionDetail({
       !e?.data;
     if(!b.hidden){
       b.textContent=state.display
-        ? e?.corridor?.status==='provisional'||e?.planner?.status==='provisional'
-          ? 'Return to map · inferred path' : 'Return to map'
+        ? e?.corridor?.status==='provisional'
+          ? 'Return to map · inferred lanes' : 'Return to map · road-level'
         : 'Junction detail';
       b.setAttribute('aria-pressed',String(state.display));
       const count=e?.candidates?.features?.length||0;
       const pairs=e?.ordinal?.pairs?.length||0;
       b.title=e?.corridor?.status==='provisional'
-        ? 'Local lane-centered corridor inferred from osm2streets geometry; not verified for driving'
-        : e?.planner?.status==='provisional'
-        ? 'Lane-level path inferred from reconstructed geometry; not verified driving guidance'
-        : pairs
-          ? pairs+' provisional left-to-right lane correspondences · not verified'
-          : count
-          ? count+' provisional approach lanes · no verified exit connections'
-          : 'Schematic OSM geometry · no evidence-backed lane approach available';
+        ? e.corridor.samples+' inferred lane-line points across '+
+          e.corridor.coverage.length+' segments. Not verified driving guidance.'
+        : 'No reliable local lane corridor: '+(e?.corridor?.reason||'missing geometry')+
+          '. '+count+' tagged approach lanes, '+pairs+' ordinal candidates.';
     }
   }
   function updateAppearance(){
@@ -385,15 +383,11 @@ export function createJunctionDetail({
     active:()=>state.display,
     candidateCount:()=>entry()?.candidates?.features?.length||0,
     hasTrajectory:()=>state.display &&
-      (entry()?.corridor?.status==='provisional'||
-        entry()?.planner?.status==='provisional'),
+      entry()?.corridor?.status==='provisional',
     coverage:()=>{
       if(!state.display)return [];
       const e=entry();
-      if(e?.corridor?.status==='provisional')return e.corridor.coverage;
-      if(e?.planner?.status==='provisional'&&state.target)
-        return [[Math.max(0,state.target.offset-113),state.target.offset+113]];
-      return [];
+      return e?.corridor?.status==='provisional'?e.corridor.coverage:[];
     },
     position:()=>state.target?.position||null,
     currentTarget:()=>state.target,
