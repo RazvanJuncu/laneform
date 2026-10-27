@@ -6,6 +6,8 @@ import mapStyle from './glide-map-style.json';
 import { splitPathByDistance } from './route-progress.js';
 import { extractRouteLaneGuidance, upcomingLaneGuidance } from './lane-assist.js';
 import { nextManeuverState, arrivalApproachText } from './maneuver-guidance.js';
+import {DEFAULT_SIM_RATE,simulationPlaybackRate,
+  simulationMetersPerSecond,simulationSpeedLabel} from './simulation-speed.js';
 
 import { deriveOsmLaneRecords } from './osm-lane-geometry.js';
 import { laneEventsFromCorridor, buildLaneTimeline }
@@ -58,6 +60,7 @@ const state = {
   drawQueued: false, toastTimer: null,
   sim: { active: false, playing: false, follow: true, raf: null,
     lastFrame: 0, lastCamera: 0, marker: null,
+    playbackRate: DEFAULT_SIM_RATE,
     points: [], cumulative: [], length: 0, distance: 0 }
 };
 
@@ -1078,22 +1081,18 @@ function renderCruiseGuidance(cue){
   const panel=$('cruiseGuidance');
   if(!panel)return;
   panel.replaceChildren();
+  // Single-lane roads or missing useful geometry: no Cruise at all.
+  // Junction mode suppresses it separately even if lane guidance fails.
+  if(!cue||cue.source!=='glide'||cue.kind!=='cruise'||
+    !Number.isInteger(cue.laneCount)||cue.laneCount<2||
+    cue.laneCount>9||!Array.isArray(cue.selected)){
+    panel.hidden=true;return;
+  }
+  panel.hidden=false;
   const name=document.createElement('span');
   name.className='cruise-title';
   name.textContent='Cruise';
   panel.append(name);
-  if(!cue||cue.source!=='glide'||cue.kind!=='cruise'||
-    !Number.isInteger(cue.laneCount)||cue.laneCount<2||
-    cue.laneCount>9||!Array.isArray(cue.selected)){
-    // A continuous status must not fabricate lane counts or say that the
-    // road is "clear" when OSM has no explicit forward/turn-only markings.
-    const note=document.createElement('span');
-    note.className='cruise-status cruise-unverified';
-    note.textContent='Monitoring · lanes unverified';
-    panel.append(note);
-    panel.title='Cruise is monitoring cached map data. No reliable lane recommendation yet.';
-    return;
-  }
   const note=document.createElement('span');
   note.className='cruise-status';
   note.textContent=(cue.mode==='alignment'
@@ -1143,6 +1142,18 @@ function navCamera(p,immediate=false){
     padding,duration:immediate?MOTION:(isReducedMotion ? 0 : 980)
   });
 }
+function renderNavigationLaneHud(){
+  if(junctionDetail?.guidanceMode()==='junction'){
+    // At an intersection Cruise ALWAYS disappears, even if OSM has no
+    // lane guidance. Only the square HUD may render in this mode.
+    renderCruiseGuidance(null);
+    renderLaneAssistance(junctionDetail?.suggestedLanes(),
+      junctionDetail?.laneState());
+  }else{
+    renderLaneAssistance(null);
+    renderCruiseGuidance(junctionDetail?.cruise());
+  }
+}
 function navHud(){
   const sim=state.sim,route=selectedRoute();
   if(!sim.active||!route)return;
@@ -1170,9 +1181,7 @@ function navHud(){
   // Junction Detail and the mini lane HUD share the *same* geometry-based
   // sample. Geometry readiness is asynchronous; only show known samples.
   junctionDetail?.update(offset);
-  renderLaneAssistance(junctionDetail?.suggestedLanes(),
-    junctionDetail?.laneState());
-  renderCruiseGuidance(junctionDetail?.cruise());
+  renderNavigationLaneHud();
 }
 function positionSim(meters,forceCamera=false){
   const sim=state.sim;
@@ -1204,6 +1213,8 @@ function startNavigationDemo(){
   $('navFollow').classList.add('selected');
   $('navFollow').setAttribute('aria-pressed','true');
   $('navScrub').value='0';
+  $('navSpeed').value=String(sim.playbackRate);
+  $('navSpeedValue').textContent=simulationSpeedLabel(sim.playbackRate);
   navHud();
   navCamera(along(0),true);
   toast('Simulation only · Not active GPS navigation.');
@@ -1221,8 +1232,9 @@ function tickSim(timestamp){
   if(!sim.playing||!sim.active)return;
   if(sim.lastFrame){
     const dt=Math.max(0,Math.min(.10,(timestamp-sim.lastFrame)/1000));
-    // 7× a nominal 45 km/h. Not representative of actual speed/traffic.
-    positionSim(sim.distance+dt*(45/3.6)*7);
+    // User-selected playback speed; 1× corresponds to 45 km/h,
+    // and higher multipliers accelerate preview/scrubbing (not traffic).
+    positionSim(sim.distance+dt*simulationMetersPerSecond(sim.playbackRate));
   }
   sim.lastFrame=timestamp;
   if(sim.playing)sim.raf=requestAnimationFrame(tickSim);
@@ -1315,10 +1327,7 @@ function attachEvents() {
       // Geometry frequently arrives while the user has playback PAUSED.
       // Redraw the route canvas immediately, not just the compact HUD.
       requestDraw();
-      if(state.sim.active)
-        renderLaneAssistance(junctionDetail?.suggestedLanes(),
-          junctionDetail?.laneState());
-        renderCruiseGuidance(junctionDetail?.cruise());
+      if(state.sim.active)renderNavigationLaneHud();
     },
     onButtonAction:()=>{
       if(!state.sim.active)return;
@@ -1354,6 +1363,13 @@ function attachEvents() {
     $('navFollow').classList.toggle('selected',state.sim.follow);
     $('navFollow').setAttribute('aria-pressed',String(state.sim.follow));
     if(state.sim.follow)navCamera(along(state.sim.distance),true);
+  });
+  $('navSpeed').addEventListener('input',event=>{
+    state.sim.playbackRate=simulationPlaybackRate(event.target.value);
+    event.target.value=String(state.sim.playbackRate);
+    $('navSpeedValue').textContent=simulationSpeedLabel(
+      state.sim.playbackRate);
+    // The current playback picks up the new rate on the next frame.
   });
   $('navScrub').addEventListener('input',event=>{
     pauseSim();
