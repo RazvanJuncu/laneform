@@ -30,6 +30,9 @@ const SEARCH_GAP = 8000;
 const RECENT_LIMIT = 5;
 const isReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const MOTION = isReducedMotion ? 0 : 930;
+// Set by the GitHub Pages build. Shows which deployed commit is actually running.
+const GLIDE_BUILD_SHA = String(import.meta.env.VITE_BUILD_SHA || 'local');
+window.glideBuildInfo=()=>({commit:GLIDE_BUILD_SHA});
 let junctionDetail=null;
 const state = {
   map: null, mapReady: false, mode: 'idle',
@@ -178,7 +181,9 @@ function initMap() {
   map.on('style.load', () => {
     state.mapReady = true;
     $('mapState').classList.add('ready');
-    $('mapState').querySelector('.map-state-label').textContent = 'Ready';
+    $('mapState').querySelector('.map-state-label').textContent =
+      'Ready · '+GLIDE_BUILD_SHA.slice(0,7);
+    $('mapState').title='Glide build '+GLIDE_BUILD_SHA;
     centerInitialView();
     requestDraw();
   });
