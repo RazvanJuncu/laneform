@@ -85,11 +85,22 @@ through the junction. Abrupt same-road lane jumps are rejected rather than
 drawing instantaneous lateral diagonals. If local lane geometry is missing
 or ambiguous, the road-level route remains visible.
 
+Lane trajectory rendering and ordinary TomTom route drawing now use the
+**same topmost route canvas**. MapLibre continues to render the reconstructed
+road polygons and markings; its old lane-line source is retained only for
+diagnostics and no longer paints a competing path underneath the canvas.
 Only the portion of the original TomTom centerline covered by reconstructed
 lane samples is hidden. Route segments beyond the junction are preserved.
+A corridor can fail to generate a path even when lane polygons are visible;
+the route-level fallback stays visible rather than falsely claiming lane-level
+navigation. The corridor sampler now tolerates opaque road IDs and has a
+polygon-interior fallback for clipped lane shapes.
 To inspect why a junction is still road-level, open the browser console and run
 `glideJunctionInfo()`; look at `corridorStatus`, `corridorSamples`,
-and `corridorCoverage`. Synthetic geometry tests run through
+`corridorDiagnostics` (including `schemaSamples`) and `corridorCoverage`.
+Then run `glideLanePaintInfo()` to distinguish an inferred path painted on
+the route canvas (`canvasLaneSegments>0`) from the unmodified provider route
+(`providerRoadClipped=false`). Synthetic geometry tests run through
 `scripts/check-lane-corridor.mjs`.
 
 ### Glide lane quick-check HUD
