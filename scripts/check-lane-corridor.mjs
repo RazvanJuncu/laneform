@@ -130,8 +130,10 @@ const inferred=buildLaneCorridor({
 });
 assert.equal(inferred.status,'provisional',
   'Carriageway geometry can still power a provisional map path');
-assert.equal(inferred.recommendation,null,
-  'Never claim known lane counts when the OSM lane direction is missing');
+assert.deepEqual(inferred.recommendation?.selected,[1],
+  'Right-hand traffic geometry can infer the mapped lane ordinal when road/index exist');
+assert.equal(inferred.recommendation?.status,'inferred',
+  'Missing direction still yields explicitly provisional, never verified, HUD guidance');
 assert.ok(inferred.diagnostics.inferredDirectionPolygons>0);
 const alternateSchema=twoForward.map(f=>({
   ...f,properties:{
@@ -157,5 +159,39 @@ const unsafe=buildLaneCorridor({
 assert.equal(unsafe.status,'unavailable',
   'Never infer that unknown polygon types are motor-vehicle lanes');
 assert.equal(unsafe.diagnostics.rejected.type,noType.length);
+
+
+// Once a left-turn lane is selected, keep its lateral position instead of
+// moving into another mapped lane when the old +45m preference window ended.
+// This synthetic straight roadway isolates lane continuity from turn curvature.
+const longLine={type:'LineString',coordinates:[
+  [26,44],[26,44.0011],[26,44.0026]
+]};
+const longProfile=routeProfile({geometry:longLine});
+const longRoute={type:'Feature',geometry:longLine,properties:{
+  summary:{lengthInMeters:longProfile.length}
+}};
+const threeForward=[
+  polygon(72,0,'Forward',26.000015,26.000045,
+    44.00005,44.00255),
+  polygon(72,1,'Forward',26.000047,26.000077,
+    44.00005,44.00255),
+  polygon(72,2,'Forward',26.000079,26.000109,
+    44.00005,44.00255)
+];
+const atTurn=longProfile.cumulative[1];
+const consistent=buildLaneCorridor({
+  route:longRoute,offset:atTurn,lanes:threeForward,radius:120,
+  instruction:{routeOffsetInMeters:atTurn,maneuver:'TURN_LEFT'}
+});
+assert.equal(consistent.status,'provisional');
+const longPath=consistent.path.features.flatMap(f=>
+  f.geometry.coordinates);
+assert.ok(longPath.length>20);
+const measuredLanes=longPath.filter(p=>p[1]>44.00175);
+assert.ok(measuredLanes.length>3);
+assert.ok(measuredLanes.every(p=>p[0]<26.000050),
+  'The chosen leftmost lane must remain leftmost >70m after a maneuver');
+assert.deepEqual(consistent.recommendation?.selected,[0]);
 
 console.log('Glide geometry-first lane-corridor regression tests passed.');
