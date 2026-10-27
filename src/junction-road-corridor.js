@@ -7,6 +7,7 @@ import {expectedLaneTurn} from './lane-path-candidates.js';
 import {smoothMappedTurn} from './junction-turn-connector.js';
 import {suppressLaneSamplingSpikes} from './lane-sampling-filter.js';
 import {splitImplausibleThroughPath} from './lane-straight-sanity.js';
+import {repairReturningLaneDetours} from './lane-return-filter.js';
 
 const RAD=Math.PI/180;
 const SAMPLE=5;
@@ -267,7 +268,8 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
     turnConnector:'not-required',turnConnectorGap:0,
     turnConnectorMethod:null,turnRadiusMeters:null,
     turnAngleDegrees:null,triangleSpikesCorrected:0,
-    triangleSpikesDiscarded:0,throughKinksRejected:0
+    triangleSpikesDiscarded:0,throughKinksRejected:0,
+    returningDetoursRepaired:0,returningDetourEvents:0
   };
   const result={status:'unavailable',path:empty(),coverage:[],samples:0,
     recommendation:null,nearApproachRecommendation:null,
@@ -386,7 +388,12 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
   diagnostics.triangleSpikesDiscarded=filtered.diagnostics.discarded;
   // Raw polygon matches are ambiguous inside the intersection. Connect
   // stable entry and exit lane axes, or keep the road-level fallback.
-  let smoothed=filtered.samples;
+  const firstRepairs=repairReturningLaneDetours(filtered.samples,{
+    profile,positionAtDistance
+  });
+  let smoothed=firstRepairs.samples;
+  diagnostics.returningDetoursRepaired+=firstRepairs.diagnostics.repaired;
+  diagnostics.returningDetourEvents+=firstRepairs.diagnostics.events;
   if(sideOf(expectedLaneTurn(instruction))){
     const result=smoothMappedTurn(smoothed,{
       turnDistance:offset*scale,
@@ -433,14 +440,21 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
     active.push(s);
   }
   close();
-  const straight=expectedLaneTurn(instruction)==='through';
-  const safePieces=straight?pieces.flatMap(part=>{
-    const checked=splitImplausibleThroughPath(part,{
+  // A LEFT/RIGHT instruction hundreds of metres away does not mean the
+  // preceding carriageway is curving. Apply straight-section guards on all
+  // sampled approaches, while the gate itself leaves actual road bends alone.
+  const safePieces=pieces.flatMap(part=>{
+    const repaired=repairReturningLaneDetours(part,{
+      profile,positionAtDistance
+    });
+    diagnostics.returningDetoursRepaired+=repaired.diagnostics.repaired;
+    diagnostics.returningDetourEvents+=repaired.diagnostics.events;
+    const checked=splitImplausibleThroughPath(repaired.samples,{
       profile,positionAtDistance
     });
     diagnostics.throughKinksRejected+=checked.rejected;
     return checked.pieces;
-  }):pieces;
+  });
   diagnostics.continuousSections=safePieces.length;
   if(!safePieces.length){
     result.reason=diagnostics.crossSections===0
