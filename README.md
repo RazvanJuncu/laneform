@@ -123,6 +123,12 @@ a convincing connection is missing, the unstable middle is suppressed rather
 than showing an invented lane jump. The rest of the road-level route remains
 visible. Real-world lane guidance is not yet verified.
 
+The pre-turn OSM cross-section sampler also runs a conservative, local
+straight-road spike filter. It rejects brief lateral polygon snaps which
+create triangular teeth in the lane trajectory, but does not flatten genuine
+road turns or stable lane changes. See `src/lane-sampling-filter.js` and
+`scripts/check-lane-sampling-filter.mjs`.
+
 Unit and integration tests: `scripts/check-junction-turn-connector.mjs` and
 `scripts/check-junction-turn-integration.mjs`. In browser diagnostics inspect
 `glideJunctionInfo().corridorDiagnostics.turnConnector`: `smooth`,
@@ -175,7 +181,12 @@ The top-left HUD shows two different rows of arrowless lane squares:
 Both use samples from the same local lane trajectory as the map, not TomTom
 arrows. They are labeled **Glide (inferred)**; lane ordinals and physical
 connectivity remain unverified and the app does not know the driver's actual
-lane. The reveal behavior lives in `src/lane-hud-model.js`, with tests in
+lane. **Trivial single-lane passages** (one incoming lane and no meaningful
+choice on exit) suppress lane-assist completely, including detected
+straight-through junctions. When a dedicated turning lane is mapped to appear
+late, the first row stays hidden until the approach widening is relevant, then
+shows the new lane with a **+**. The added side follows the routed maneuver,
+is explicitly inferred, and does not claim verified physical markings. The reveal behavior lives in `src/lane-hud-model.js`, with tests in
 `scripts/check-simplified-lane-ui.mjs` and
 `scripts/check-lane-quick-check.mjs`.
 
