@@ -24,7 +24,11 @@ for(let i=0;i<=24;i++){
 }
 const result=smoothMappedTurn(samples,{
   turnDistance:60,
-  routeDistance:(point)=>Math.min(meters(point,local(60,0)),30)
+  routeDistance:(point)=>{
+    const x=(point[0]-origin[0])*111320*Math.cos(lat*Math.PI/180);
+    const y=(point[1]-origin[1])*110540;
+    return Math.min(Math.abs(y),Math.abs(x-60));
+  }
 });
 assert.equal(result.bridged,true,'Two stable lane arms should connect');
 assert.ok(result.gap>25);
