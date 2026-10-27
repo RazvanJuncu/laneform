@@ -7,6 +7,7 @@ import {smallAreaOsmUrl,MAX_OSM_BYTES,validateOsmXML,
   validateGeojson,blankCollection} from './street-geometry-adapter.js';
 import {partitionJunctionGeometry} from './junction-focus.js';
 import {simplifiedJunctionGeometry} from './junction-simplified-map.js';
+import {twoStageLaneGuidance} from './lane-hud-model.js';
 import {candidateApproachLanePaths} from './lane-path-candidates.js';
 import {buildJunctionOrdinalCandidates} from './junction-lane-bridge.js';
 import {planJunctionTrajectory} from './junction-driver-planner.js';
@@ -439,16 +440,12 @@ export function createJunctionDetail({
       };
     },
     suggestedLanes:()=>{
-      const target=state.target,rec=entry()?.corridor?.recommendation;
-      const ahead=target?.offset-state.progress;
-      // No speculative fallback to provider arrow data. Only return the
-      // exact lane group represented by the reconstructed trajectory.
-      if(!rec||!Number.isFinite(ahead)||ahead<0||ahead>700)return null;
-      if(!Number.isInteger(rec.laneCount)||rec.laneCount<1||
-        rec.laneCount>9||!Array.isArray(rec.selected)||
-        !rec.selected.length||rec.selected.some(i=>
-          !Number.isInteger(i)||i<0||i>=rec.laneCount))return null;
-      return {...rec,distanceToManeuver:ahead};
+      const e=entry()?.corridor;
+      const ahead=state.target?.offset-state.progress;
+      // Both rows come directly from the approach/exit samples of the SAME
+      // rendered lane corridor, with the exit row revealed closer to junction.
+      return twoStageLaneGuidance(
+        e?.recommendation,e?.exitRecommendation,ahead);
     },
     info:()=>({
       targetCount:state.targets.length,
@@ -469,6 +466,7 @@ export function createJunctionDetail({
       corridorSamples:entry()?.corridor?.samples||0,
       corridorCoverage:entry()?.corridor?.coverage||[],
       hudLaneRecommendation:entry()?.corridor?.recommendation||null,
+      hudExitRecommendation:entry()?.corridor?.exitRecommendation||null,
       plannedLaneSelection:entry()?.planner?.selected||null,
       nextManeuverLookahead:entry()?.planner?.lookahead||null,
       targetOffsetMeters:state.target?.offset??null,
