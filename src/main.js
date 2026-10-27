@@ -35,6 +35,11 @@ const MOTION = isReducedMotion ? 0 : 930;
 const GLIDE_BUILD_SHA = String(import.meta.env.VITE_BUILD_SHA || 'local');
 window.glideBuildInfo=()=>({commit:GLIDE_BUILD_SHA});
 let junctionDetail=null;
+let lastLanePaint={
+  canvasLaneSegments:0,providerRoadClipped:false,junctionDetailActive:false,
+  renderer:'shared-route-canvas'
+};
+window.glideLanePaintInfo=()=>({...lastLanePaint});
 const state = {
   map: null, mapReady: false, mode: 'idle',
   key: '', query: '', destinationName: '', destination: null,
@@ -397,6 +402,11 @@ function drawRoutes() {
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
+  lastLanePaint={
+    canvasLaneSegments:0,providerRoadClipped:false,
+    junctionDetailActive:junctionDetail?.active()===true,
+    renderer:'shared-route-canvas'
+  };
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, width, height);
   if (!state.routes || (state.mode !== 'preview' && state.mode !== 'navigation')) return;
@@ -443,6 +453,8 @@ function drawRoutes() {
     const laneTrajectory=junctionFocus?junctionDetail?.trajectory():null;
     const laneCoverage=laneTrajectory?.coverage||[];
     const realLength=feature.properties?.summary?.lengthInMeters;
+    lastLanePaint.providerRoadClipped=junctionFocus&&laneCoverage.length>0;
+    lastLanePaint.localCoverageSections=laneCoverage.length;
     if(traveled.length>=2){
       const past=laneCoverage.length
         ?routeOutsideLaneCoverage(sim,0,sim.distance,laneCoverage,realLength)
@@ -481,6 +493,7 @@ function drawRoutes() {
     if(laneTrajectory){
       const laneSegments=visibleLaneTrajectorySegments(
         laneTrajectory,sim.length?sim.distance/sim.length*realLength:0);
+      lastLanePaint.canvasLaneSegments=laneSegments.length;
       if(laneSegments.length){
         stroke(laneSegments,'#65E9C5',8,.20,4);
         stroke(laneSegments,'#BDF8E8',3.8,.98);
