@@ -30,7 +30,50 @@ function ringSegments(feature){
   return out;
 }
 function cross(a,b){return a[0]*b[1]-a[1]*b[0];}
-function crossSection(point,tangent,segments){
+function insideRing(point,ring){
+  let inside=false;
+  for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+    const a=ring[i],b=ring[j];
+    if(!valid(a)||!valid(b))continue;
+    if((a[1]>point[1])!==(b[1]>point[1])&&
+      point[0]<(b[0]-a[0])*(point[1]-a[1])/(b[1]-a[1])+a[0])
+      inside=!inside;
+  }
+  return inside;
+}
+function insideFeature(point,feature){
+  const g=feature?.geometry;
+  const polys=g?.type==='Polygon'?[g.coordinates]:
+    g?.type==='MultiPolygon'?g.coordinates:[];
+  return polys.some(poly=>{
+    if(!Array.isArray(poly)||!poly.length||!insideRing(point,poly[0]))
+      return false;
+    return !poly.slice(1).some(ring=>insideRing(point,ring));
+  });
+}
+function sampledCrossSection(center,normal,feature){
+  // Clipped osm2streets polygons may contain multiple crossing edges at a
+  // vertex; point-in-polygon sampling avoids rejecting those narrow lanes.
+  const cos=Math.max(.1,Math.cos(center[1]*RAD));
+  const step=.45,results=[];
+  let start=null;
+  for(let d=-CAST;d<=CAST+step;d+=step){
+    const point=[center[0]+d*normal[0]/(111320*cos),
+      center[1]+d*normal[1]/110540];
+    const inside=d<=CAST&&insideFeature(point,feature);
+    if(inside&&start===null)start=d;
+    else if(!inside&&start!==null){
+      const width=d-start,offset=(start+d)/2;
+      if(width>=1.45&&width<=7.5&&Math.abs(offset)<=MAX_LATERAL)
+        results.push({offset,point:[
+          center[0]+offset*normal[0]/(111320*cos),
+          center[1]+offset*normal[1]/110540]});
+      start=null;
+    }
+  }
+  return results;
+}
+function crossSection(point,tangent,segments,feature){
   const heading=[tangent[0]*111320*Math.cos(point[1]*RAD),
     tangent[1]*110540];
   const length=Math.hypot(...heading);
@@ -60,7 +103,7 @@ function crossSection(point,tangent,segments){
         point[1]+offset*normal[1]/110540]
     });
   }
-  return centers;
+  return centers.length?centers:sampledCrossSection(point,normal,feature);
 }
 function selectedTurn(instruction,lookahead,d){
   const current=expectedLaneTurn(instruction);
@@ -178,6 +221,13 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
   next=[],radius=125}={}){
   const diagnostics={
     inputPolygons:Array.isArray(lanes)?lanes.length:0,
+    schemaSamples:Array.isArray(lanes)
+      ?lanes.slice(0,5).map(f=>({
+        type:f?.properties?.type??null,
+        direction:f?.properties?.direction??null,
+        road:f?.properties?.road??null,
+        index:f?.properties?.index??null
+      })):[],
     eligibleDrivingPolygons:0,crossSections:0,
     matchedSamples:0,continuousSections:0,approachSamples:0
   };
@@ -193,12 +243,21 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
   if(until-from<12)return result;
   const driving=lanes.flatMap(feature=>{
     const p=feature?.properties||{};
-    if(String(p.type).toLowerCase()!=='driving'||
-      !Number.isInteger(p.road)||!Number.isInteger(p.index)||
-      !['Forward','Backward'].includes(p.direction))return [];
+    if(!['driving','drive'].includes(String(p.type).toLowerCase()))return [];
+    const index=Number(p.index);
+    const code=String(p.direction||'').toLowerCase();
+    const direction=code==='forward'?'Forward':
+      code==='backward'?'Backward':null;
+    // Road identifiers are opaque IDs in osm2streets, and may be serialized
+    // as strings in some versions. Never require a numeric ID just to draw.
+    const road=typeof p.road==='string'?p.road.trim():p.road;
+    const validRoad=(typeof road==='string'&&road.length>0&&road.length<=100)||
+      Number.isInteger(road);
+    if(!direction||!Number.isInteger(index)||index<0||index>50||
+      !validRoad)return [];
     const edges=ringSegments(feature);
     return edges.length<3?[]:[{
-      feature,edges,road:p.road,index:p.index,direction:p.direction,
+      feature,edges,road,index,direction,
       turns:Array.isArray(p.allowed_turns)
         ?p.allowed_turns.map(t=>String(t).toLowerCase()):[]
     }];
@@ -222,7 +281,7 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
     const prefer=laneSide(instruction,next,d/scale);
     const candidates=[];
     for(const f of driving){
-      for(const c of crossSection(p,tangent,f.edges)){
+      for(const c of crossSection(p,tangent,f.edges,f.feature)){
         candidates.push({...c,road:f.road,index:f.index,
           direction:f.direction,turns:f.turns});
       }
