@@ -34,7 +34,7 @@ function cubic(a,b,dirIn,dirOut,steps){
 // for roughly orthogonal turns, use straight legs and a short-radius corner.
 // Endpoints and bearings come from reconstructed lane samples, not TomTom.
 function compactCorner(a,b,dirIn,dirOut,steps,{
-  minRadius=4.5,maxRadius=9
+  minRadius=4.5,maxRadius=7
 }={}){
   const d=metric(a,b),span=len(d);
   const cosine=Math.max(-1,Math.min(1,dot(dirIn,dirOut)));
@@ -51,7 +51,7 @@ function compactCorner(a,b,dirIn,dirOut,steps,{
   const tangent=Math.tan(angle/2);
   if(!Number.isFinite(tangent)||tangent<=0)return null;
   const requested=Math.max(minRadius,
-    Math.min(maxRadius,span*.18));
+    Math.min(maxRadius,span*.14));
   const radius=Math.min(requested,
     Math.min(entryLength,exitLength)*.78/tangent);
   if(radius<minRadius*.75)return null;
@@ -157,6 +157,11 @@ export function smoothMappedTurn(samples,{turnDistance,
     const count=after-before;
     const fillet=compactCorner(entry.point,exit.point,
       inHeading,outHeading,count);
+    // Never use the original far-endpoint cubic for a meaningful turning
+    // angle: it creates a huge sweeping diagonal through the junction (the
+    // exact failure visible in the Mircea Eliade / Floreasca screenshots).
+    // Seek different stable anchors on the next trim iteration instead.
+    if(!fillet&&bend>=.64)continue;
     const curve=fillet?.curve||cubic(entry.point,exit.point,
       inHeading,outHeading,count);
     if(typeof routeDistance==='function'){
