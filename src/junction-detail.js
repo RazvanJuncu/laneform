@@ -399,6 +399,7 @@ export function createJunctionDetail({
       ordinalPairs:entry()?.ordinal?.pairs?.length||0,
       plannedTrajectory:entry()?.planner?.status||'unavailable',
       corridorStatus:entry()?.corridor?.status||'unavailable',
+      corridorReason:entry()?.corridor?.reason||'No corridor data',
       corridorSamples:entry()?.corridor?.samples||0,
       corridorCoverage:entry()?.corridor?.coverage||[],
       plannedLaneSelection:entry()?.planner?.selected||null,
