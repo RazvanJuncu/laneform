@@ -1037,12 +1037,20 @@ function renderLaneAssistance(laneData,laneState=null){
     rail.setAttribute('aria-label',label+': '+group.laneCount+
       ' driving lanes, '+group.selected.map(i=>
         'lane '+(i+1)+' of '+group.laneCount).join(' and ')+
-      ' highlighted (inferred from OSM).');
+      ' highlighted (inferred from OSM).'+
+      (Array.isArray(group.addedLaneIndices)&&group.addedLaneIndices.length
+        ?' Newly opening lanes: '+group.addedLaneIndices.map(i=>i+1).join(', ')+'.'
+        :''));
     const selected=new Set(group.selected);
+    const added=new Set(Array.isArray(group.addedLaneIndices)
+      ?group.addedLaneIndices:[]);
     for(let i=0;i<group.laneCount;i++){
       const square=document.createElement('span');
       square.className='lane-cell glide-lane-cell'+
-        (selected.has(i)?' recommended':'');
+        (selected.has(i)?' recommended':'')+
+        (added.has(i)?' added-lane':'');
+      // A plus means a newly opening turning lane, not a maneuver arrow.
+      square.textContent=added.has(i)?'+':'';
       square.setAttribute('aria-hidden','true');
       rail.append(square);
     }
