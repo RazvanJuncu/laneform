@@ -91,10 +91,30 @@ export function cruiseFromLaneContinuity({
         ?pre.n-1:(pre.n-1)/2;
       const selected=[...mapping.indices].sort((a,b)=>
         Math.abs(a-ideal)-Math.abs(b-ideal)||a-b)[0];
+      // Before a third lane actually starts, Cruise must NOT display three
+      // current lane ovals. Map back to a stable 2-lane upstream section
+      // where possible; only reveal the 3-lane diagram near the widening.
+      let shownCount=pre.n,shownSelected=selected,shownDrop=drop,
+        anticipatedWidening=null;
+      if(pre.at-progress>42){
+        const prior=frames.filter(f=>f.at>=pre.at-165&&
+          f.at<=pre.at-23&&f.laneCount===pre.n-1&&
+          f.direction===pre.direction)
+          .map(f=>groupAt(frames,frames.indexOf(f)))
+          .filter(Boolean).sort((a,b)=>b.at-a.at)[0];
+        const fromTwo=prior?continuity(pre,prior):null;
+        if(fromTwo&&fromTwo.indices.includes(selected)){
+          shownCount=prior.n;
+          shownSelected=fromTwo.indices.indexOf(selected);
+          shownDrop=[];
+          anticipatedWidening=pre.n;
+        }
+      }
       candidates.push({
         source:'glide',status:'inferred',kind:'cruise',mode:'continuity',
-        laneCount:pre.n,selected:[selected],
-        allowedThrough:mapping.indices,nonContinuing:drop,
+        laneCount:shownCount,selected:[shownSelected],
+        allowedThrough:shownCount===pre.n?mapping.indices:[shownSelected],
+        nonContinuing:shownDrop,upcomingLaneCount:anticipatedWidening,
         distanceToJunction:pre.at-progress,
         reason:'Repeated mapped cross-sections show a lane does not continue on the routed carriageway',
         offset:pre.at,confidence:'provisional'
