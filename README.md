@@ -147,28 +147,46 @@ directionality) is needed before enabling roundabout lane suggestions.
 This protects against false guidance but does not fix missing OSM geometry.
 The existing corridor tests cover the roundabout fallback and orphan fragments.
 
-### Glide lane quick-check HUD
+### Simplified Junction Detail and two-stage lane quick-check
 
-The lane strip in the top-left maneuver console is **not TomTom's turn-arrow
-strip anymore**. When an OSM junction reconstruction yields a valid
-lane-centered trajectory, the same stored corridor approach sample supplies
-its directional lane count and selected lane ordinal to the HUD. Empty squares
-show other lanes; the lane used by the map trajectory is lit. The caption
-identifies Glide's suggestion as *inferred* rather than verified. Updates
-are triggered when OSM geometry loads as well as during simulation progress.
+Glide now consumes the original osm2streets lane polygons, markings and road
+movement data **for calculations**, but renders a cleaner driver-oriented map:
+only drivable roadway surfaces, subtle dividers and the lane-centered selected
+route. Raw turn-arrow glyphs, crosswalk stripes, technical intersection outlines
+and competing debug candidate paths are hidden from the visible Junction Detail.
+The simplification is visual only; it does not discard the full OSM data from
+the planning engine. Geometry filtering is in
+`src/junction-simplified-map.js`.
 
-There is deliberately no TomTom fallback in this HUD: while the junction
-geometry is loading or fails to establish a suitable approach lane, the
-squares stay hidden rather than offer a conflicting recommendation. TomTom
-lane records remain available for diagnostic coverage and route planning.
-Only locally reconstructed approaches produce squares; this is not validated
-lane guidance for actual driving. The inspected lane count excludes any
-opposing-direction lanes where the reconstruction distinguishes directions.
-The lane recommendation is derived from a sample on the exact map trajectory,
-rather than inferred independently by the UI.
+The top-left HUD shows two different rows of arrowless lane squares:
+
+- **Approach**: which mapped lane Glide selects before the intersection,
+  available early once the area's geometry has been reconstructed.
+- **After junction**: the mapped lane sampled on the *outgoing* route, shown
+  only when the maneuver is within **115 metres**. If there is no stable
+  mapped exit-lane count, the second row is omitted rather than guessed.
+
+Both use samples from the same local lane trajectory as the map, not TomTom
+arrows. They are labeled **Glide (inferred)**; lane ordinals and physical
+connectivity remain unverified and the app does not know the driver's actual
+lane. The reveal behavior lives in `src/lane-hud-model.js`, with tests in
+`scripts/check-simplified-lane-ui.mjs` and
+`scripts/check-lane-quick-check.mjs`.
+
+**Straight-through junction sampling:** the already-loaded osm2streets
+road-level intersection graph is inspected for nearby crossings with at least
+three distinct road arms where the selected route continues roughly straight.
+Glide can temporarily select an OSM-derived straight-through lane corridor
+for both the map and HUD, even when TomTom has no maneuver instruction there.
+This uses the existing OSM reconstruction only—**no new TomTom requests and
+no extra OSM fetches**. It is intentionally scoped to the area around the
+next *routed* junction, not a guarantee of complete major-junction coverage
+along the whole trip. Unmapped or ambiguous intersections produce no such
+hint. Tests: `scripts/check-through-junction-sampling.mjs`.
+
 
 It does **not** detect the user's actual lane, confirm all OSM restrictions,
-handle every junction (especially ones TomTom gives no instruction for), or
+handle every junction (including many without TomTom instructions), or
 guarantee that changing lanes before the next turn is safely achievable. Do not
 use these provisional curves as real-world lane-driving instructions. Right-hand
 traffic is currently assumed for inferred keep-side behavior: a driving-side
