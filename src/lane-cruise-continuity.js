@@ -60,7 +60,9 @@ export function cruiseFromLaneContinuity({
   const frames=laneFrames.filter(safeFrame)
     .sort((a,b)=>a.at-b.at);
   if(frames.length<5)return null;
-  const future=frames.filter(f=>f.at>=progress+35&&
+  // Retain nearby samples for stable grouping when within ~30 metres of
+  // the widening. Do not drop the whole lane signal at its most useful time.
+  const future=frames.filter(f=>f.at>=progress+8&&
     f.at<=progress+horizonMeters);
   const candidates=[];
   const seen=new Set();
