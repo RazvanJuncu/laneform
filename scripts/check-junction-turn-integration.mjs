@@ -28,6 +28,10 @@ const output=buildLaneCorridor({
 });
 assert.equal(output.diagnostics.turnConnector,'smooth',
   'The turn should use a dedicated connector, never raw crossing polygon samples');
+assert.equal(output.diagnostics.turnConnectorMethod,'compact-corner',
+  'An orthogonal reconstructed junction should turn close to its corner');
+assert.ok(output.diagnostics.turnRadiusMeters<=9.1,
+  'The displayed turn radius should not produce a huge sweeping arc');
 assert.equal(output.status,'provisional');
 assert.ok(output.path.features.length>0);
 const segment=output.path.features.find(f=>
