@@ -1096,14 +1096,17 @@ function renderCruiseGuidance(cue){
   }
   const note=document.createElement('span');
   note.className='cruise-status';
-  note.textContent='Keep through · '+distance(Math.max(0,
-    cue.distanceToJunction))+' ahead';
+  note.textContent=(cue.mode==='alignment'
+      ?'Align for next turn · ':'Keep through · ')+
+    distance(Math.max(0,cue.distanceToJunction))+' ahead';
   const rail=document.createElement('div');
   rail.className='cruise-rail';
   rail.setAttribute('role','img');
   rail.setAttribute('aria-label',
-    cue.laneCount+' mapped lanes; keep lane '+
-    (cue.selected[0]+1)+' (inferred from OSM turn markings).');
+    cue.laneCount+' mapped lanes; suggested lane '+
+    (cue.selected[0]+1)+(cue.mode==='alignment'
+      ?' (geometric alignment only, earlier turn restrictions unknown).'
+      :' (inferred from OSM turn markings).'));
   for(let i=0;i<cue.laneCount;i++){
     const pill=document.createElement('span');
     pill.className='cruise-pill'+(cue.selected.includes(i)?' recommended':
@@ -1112,8 +1115,9 @@ function renderCruiseGuidance(cue){
     rail.append(pill);
   }
   panel.append(note,rail);
-  panel.title='OSM shows a through lane and at least one turn-only lane. '
-    +'This is a provisional map-based suggestion, not detected vehicle position.';
+  panel.title=cue.mode==='alignment'
+    ?'Geometric lane alignment for the next routed turn. No turn-only restrictions verified.'
+    :'OSM marks through and turn-only lanes. This is inferred and not your detected vehicle lane.';
 }
 function navCamera(p,immediate=false){
   if(!state.sim.follow||!state.map||!p)return;
