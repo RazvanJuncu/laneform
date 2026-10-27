@@ -1,7 +1,7 @@
 > **Glide's development target is global.** Road routing should be available wherever
 > TomTom and map data support it; lane assistance should anticipate upcoming
 > turn-only lanes, lane endings, merges, and junctions. In the current alpha,
-> only evidence-backed lane markings are shown. See
+> evidence-backed lane markings are distinguished from provisional geometry-based lane trajectories. See
 > [Global Lane Intelligence](docs/global-lane-intelligence.md) for the engine,
 > staged geographic coverage and validation requirements.
 
@@ -22,7 +22,7 @@ Glide is the visual brand. The GitHub repository and developer identifiers remai
 - Foreground GPS following (explicit opt-in, preview only)
 - Client-side TomTom API key entry; no key in Git history
 
-**Not yet included:** map-matched live maneuver selection, automatic rerouting, validated driving navigation, voice prompts, verified lane directions or intersection diagrams. The location-following preview works only while the page remains active. The Răzoare demo origin is approximate and is not suitable for deciding which lane to drive in.
+**Not yet included:** map-matched live maneuver selection, automatic rerouting, validated driving navigation, voice prompts, verified lane-to-lane transitions or production-ready intersection guidance. The location-following preview works only while the page remains active. The Răzoare demo origin is approximate and is not suitable for deciding which lane to drive in.
 
 ## Live site
 
@@ -60,6 +60,32 @@ Production caveats: provider quotas/terms apply, and a standalone GitHub Pages s
 - No polling, automated route recalculation, or timer-based traffic refreshes. Optional tile refresh only occurs on an explicit route refresh and at least 5 minutes after the last traffic-tile update.
 - Traffic snapshots can become stale. Refresh deliberately to see newer conditions; the app does not promise real-time continuous navigation.
 - Tile calls may still happen on new zooms, pans, cache misses, reconnects, and browsing sessions. These safeguards limit unnecessary calls, but do not guarantee any fixed monthly allowance.
+
+## Experimental junction driver planner (October 2026)
+
+Junction Detail overlays osm2streets lane polygons and uses a local driving-corridor
+planner (`src/junction-driver-planner.js`). Its **provisional** lane-level route
+is constructed from sampled driving-lane polygons and a smooth junction connector.
+When a suitable trajectory is available, the road-centerline canvas trace is
+hidden in detail view; otherwise ordinary routing remains visible.
+
+The planner first respects available approach-lane turn directions. On unmarked
+roads, it applies leftmost-for-left, rightmost-for-right, natural lane continuity,
+and a keep-right baseline for the Bucharest/right-hand-traffic prototype. For
+straight movements it looks ahead through up to four nearby route instructions
+(within 350 metres) and can use the next intersection's mapped lane arrows from
+the **already-fetched** OSM reconstruction. Its output is geometric inference,
+not proof of connectivity; ambiguous lane groups, missing exit geometry, and
+paths that leave the routed roadway revert to route-level guidance.
+
+It does **not** detect the user's actual lane, confirm all OSM restrictions,
+handle every junction (especially ones TomTom gives no instruction for), or
+guarantee that changing lanes before the next turn is safely achievable. Do not
+use these provisional curves as real-world lane-driving instructions. Right-hand
+traffic is currently assumed for inferred keep-side behavior: a driving-side
+source is needed before enabling worldwide lane recommendations. Geometry
+reconstruction requires its existing OSM request, with no new TomTom calls.
+Regression coverage: `scripts/check-driver-planner.mjs`.
 
 ## Roadmap
 
