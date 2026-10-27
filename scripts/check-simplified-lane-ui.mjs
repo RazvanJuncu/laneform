@@ -22,20 +22,29 @@ const mappedExpansion=lane(2,0);
 const distantWidening=twoStageLaneGuidance(lane(1,0),null,230,{
   nearApproach:mappedExpansion
 });
-assert.equal(distantWidening.laneCount,1,
-  'Avoid showing a second lane long before it physically begins');
-assert.equal(distantWidening.widensFrom,null);
+assert.equal(distantWidening,null,
+  'Do not show meaningless single-lane squares before a new lane opens');
 const finalWidening=twoStageLaneGuidance(lane(1,0),null,131,{
-  nearApproach:mappedExpansion
+  nearApproach:mappedExpansion,selectedTurnSide:'left'
 });
 assert.equal(finalWidening.laneCount,2,
   'Final approach uses the mapped lane count after the split');
 assert.deepEqual(finalWidening.selected,[0]);
+assert.deepEqual(finalWidening.addedLaneIndices,[0]);
+const rightExpansion=twoStageLaneGuidance(lane(1,0),null,131,{
+  nearApproach:lane(2,1),selectedTurnSide:'right'
+});
+assert.deepEqual(rightExpansion.addedLaneIndices,[1],
+  'A newly opened right-turn lane gets the plus on the right');
+assert.equal(twoStageLaneGuidance(lane(1,0),lane(1,0),80),null,
+  'One incoming lane to one outgoing lane needs no lane assist');
+assert.equal(twoStageLaneGuidance(lane(1,0),null,80),null,
+  'If there is no actual choice, avoid single-square lane-assist clutter');
 assert.equal(finalWidening.widensFrom,1,
   'Mark the HUD as upcoming roadway widening');
 assert.equal(twoStageLaneGuidance(lane(1,0),null,90,{
   nearApproach:{...mappedExpansion,selected:[3]}
-}).laneCount,1,'Reject invalid widening geometry');
+}),null,'Reject invalid widening geometry');
 assert.equal(twoStageLaneGuidance(lane(3,1),{
   ...lane(2,0),selected:[4]
 },60).exit,null,'Do not invent incorrect exit-lane squares');
