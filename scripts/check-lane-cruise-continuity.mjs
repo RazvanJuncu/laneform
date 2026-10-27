@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {cruiseFromLaneContinuity}
+import {cruiseFromLaneContinuity,cruiseFromAvailableLanes}
   from '../src/lane-cruise-continuity.js';
 const frames=(counts,{road=3,start=120,step=5}={})=>
   counts.map((offsets,i)=>({at:start+i*step,offsets,
@@ -82,5 +82,21 @@ assert.equal(approachingFork?.laneCount,3);
 assert.deepEqual(approachingFork.nonContinuing,[2]);
 assert.ok(approachingFork.distanceToJunction>0);
 
+
+const becomesTwo=[
+  ...frames([[-2],[-2],[-2]],{start:70,road:1}),
+  ...frames([[-2,2],[-2,2],[-2,2]],{start:155,road:2})
+];
+const widthCue=cruiseFromAvailableLanes({
+  laneFrames:becomesTwo,progress:90
+});
+assert.equal(widthCue.mode,'available');
+assert.equal(widthCue.laneCount,2);
+assert.deepEqual(widthCue.selected,[],
+  'A lane that merely opens supplies no basis to highlight a preference');
+assert.ok(widthCue.distanceToJunction>0);
+assert.equal(cruiseFromAvailableLanes({
+  laneFrames:frames([[-2],[-2],[-2]]),progress:90
+}),null,'One mapped lane is not useful Cruise lane guidance');
 
 console.log('Glide continuous rolling lane topology tests passed.');
