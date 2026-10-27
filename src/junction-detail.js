@@ -9,6 +9,7 @@ import {partitionJunctionGeometry} from './junction-focus.js';
 import {candidateApproachLanePaths} from './lane-path-candidates.js';
 import {buildJunctionOrdinalCandidates} from './junction-lane-bridge.js';
 import {planJunctionTrajectory} from './junction-driver-planner.js';
+import {buildLaneCorridor} from './junction-road-corridor.js';
 import {setStreetBasemapHidden,forgetStreetBasemapStyle} from './street-basemap.js';
 
 const DATA_SOURCE='glide-junction-lanes';
@@ -138,7 +139,7 @@ function show(map,visible){
     map.getLayoutProperty(id,'visibility')!==v)
       map.setLayoutProperty(id,'visibility',v);
 }
-function assign(map,data,selection,candidates,ordinal,planner){
+function assign(map,data,selection,candidates,ordinal,planner,corridor){
   if(!styleLayers(map))return;
   map.getSource(DATA_SOURCE).setData(selection?.context||data?.lanes||EMPTY);
   map.getSource(FOCUS_SOURCE).setData(selection?.focus||EMPTY);
@@ -146,7 +147,8 @@ function assign(map,data,selection,candidates,ordinal,planner){
   map.getSource(JUNCTION_SOURCE).setData(data?.junctions||EMPTY);
   map.getSource(CANDIDATE_SOURCE).setData(candidates||EMPTY);
   map.getSource(EXIT_SOURCE).setData(ordinal?.exits||EMPTY);
-  map.getSource(PATH_SOURCE).setData(planner?.path||EMPTY);
+  map.getSource(PATH_SOURCE).setData(
+    corridor?.status==='provisional'?corridor.path:planner?.path||EMPTY);
 }
 export function createJunctionDetail({
   mapGetter,buttonGetter,onViewChange=()=>{},onButtonAction=()=>{}
@@ -187,6 +189,12 @@ export function createJunctionDetail({
       roads:cached.data.roads?.features||[],
       next:following
     });
+    // Geometry-first corridor: supports ordinary through-junctions, short
+    // reconstructed segments, and lane polygons without turn:lanes tags.
+    cached.corridor=buildLaneCorridor({
+      route:state.route,offset:next.offset,instruction,
+      lanes:cached.data.lanes.features,next:following
+    });
   }
   function updateButton(){
     const b=button();
@@ -197,13 +205,15 @@ export function createJunctionDetail({
       !e?.data;
     if(!b.hidden){
       b.textContent=state.display
-        ? e?.planner?.status==='provisional'
+        ? e?.corridor?.status==='provisional'||e?.planner?.status==='provisional'
           ? 'Return to map · inferred path' : 'Return to map'
         : 'Junction detail';
       b.setAttribute('aria-pressed',String(state.display));
       const count=e?.candidates?.features?.length||0;
       const pairs=e?.ordinal?.pairs?.length||0;
-      b.title=e?.planner?.status==='provisional'
+      b.title=e?.corridor?.status==='provisional'
+        ? 'Local lane-centered corridor inferred from osm2streets geometry; not verified for driving'
+        : e?.planner?.status==='provisional'
         ? 'Lane-level path inferred from reconstructed geometry; not verified driving guidance'
         : pairs
           ? pairs+' provisional left-to-right lane correspondences · not verified'
@@ -231,7 +241,7 @@ export function createJunctionDetail({
       if(state.display && e?.data){
         styleLayers(m);
         if(state.currentKey!==junctionCacheKey(state.target.position)){
-          assign(m,e.data,e.selection,e.candidates,e.ordinal,e.planner);
+          assign(m,e.data,e.selection,e.candidates,e.ordinal,e.planner,e.corridor);
           state.currentKey=junctionCacheKey(state.target.position);
         }
         show(m,true);
@@ -374,7 +384,17 @@ export function createJunctionDetail({
     begin,stop,update,toggle,
     active:()=>state.display,
     candidateCount:()=>entry()?.candidates?.features?.length||0,
-    hasTrajectory:()=>state.display && entry()?.planner?.status==='provisional',
+    hasTrajectory:()=>state.display &&
+      (entry()?.corridor?.status==='provisional'||
+        entry()?.planner?.status==='provisional'),
+    coverage:()=>{
+      if(!state.display)return [];
+      const e=entry();
+      if(e?.corridor?.status==='provisional')return e.corridor.coverage;
+      if(e?.planner?.status==='provisional'&&state.target)
+        return [[Math.max(0,state.target.offset-113),state.target.offset+113]];
+      return [];
+    },
     position:()=>state.target?.position||null,
     currentTarget:()=>state.target,
     info:()=>({
@@ -384,6 +404,9 @@ export function createJunctionDetail({
       candidateLanePaths:entry()?.candidates?.features?.length||0,
       ordinalPairs:entry()?.ordinal?.pairs?.length||0,
       plannedTrajectory:entry()?.planner?.status||'unavailable',
+      corridorStatus:entry()?.corridor?.status||'unavailable',
+      corridorSamples:entry()?.corridor?.samples||0,
+      corridorCoverage:entry()?.corridor?.coverage||[],
       plannedLaneSelection:entry()?.planner?.selected||null,
       nextManeuverLookahead:entry()?.planner?.lookahead||null,
       reason:state.reason,active:state.display,
