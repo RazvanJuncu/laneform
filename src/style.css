@@ -760,6 +760,7 @@ body[data-mode="navigation"] #idleVeil{opacity:0}
 /* Glide lane quick-check: the filled square follows the very same lane
    index used to draw the reconstructed road trajectory. No maneuver arrows. */
 .lane-guidance[hidden]{display:none!important}
+.glide-lane-unavailable{color:#81919B;font-size:10px;opacity:.82}
 .glide-lane-rail{gap:6px;max-width:100%}
 .glide-lane-cell{
   flex:1 1 0;
