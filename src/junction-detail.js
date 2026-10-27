@@ -172,6 +172,18 @@ export function createJunctionDetail({
   const map=()=>mapGetter?.();
   const button=()=>buttonGetter?.();
   const entry=()=>state.target?state.cache.get(junctionCacheKey(state.target.position)):null;
+  function usableTrajectory(){
+    if(!state.route||!state.target)return null;
+    const remaining=state.target.offset-state.progress;
+    if(!Number.isFinite(remaining)||remaining>700||remaining< -35)
+      return null;
+    const corridor=entry()?.corridor;
+    if(corridor?.status!=='provisional')return null;
+    const features=corridor.path?.features||[];
+    if(!features.length||features.length!==corridor.coverage?.length)
+      return null;
+    return {features,coverage:corridor.coverage,source:'glide'};
+  }
   function classifyTarget(next,cached){
     if(!state.route||!next||!cached?.data)return;
     cached.selection=partitionJunctionGeometry(cached.data,state.route,next.offset);
@@ -393,22 +405,12 @@ export function createJunctionDetail({
     begin,stop,update,toggle,
     active:()=>state.display,
     candidateCount:()=>entry()?.candidates?.features?.length||0,
-    hasTrajectory:()=>state.display &&
-      entry()?.corridor?.status==='provisional',
-    coverage:()=>{
-      if(!state.display)return [];
-      const e=entry();
-      return e?.corridor?.status==='provisional'?e.corridor.coverage:[];
-    },
-    trajectory:()=>{
-      if(!state.display)return null;
-      const corridor=entry()?.corridor;
-      if(corridor?.status!=='provisional')return null;
-      const features=corridor.path?.features||[];
-      if(!features.length||features.length!==corridor.coverage?.length)
-        return null;
-      return {features,coverage:corridor.coverage,source:'glide'};
-    },
+    // The lane navigator is not dependent on whether the user has opened
+    // the enlarged intersection diagram. The same reconstructed path should
+    // render on the main map as soon as it is ready.
+    hasTrajectory:()=>!!usableTrajectory(),
+    coverage:()=>usableTrajectory()?.coverage||[],
+    trajectory:()=>usableTrajectory(),
     position:()=>state.target?.position||null,
     currentTarget:()=>state.target,
     laneState:()=>{
@@ -453,6 +455,11 @@ export function createJunctionDetail({
       hudLaneRecommendation:entry()?.corridor?.recommendation||null,
       plannedLaneSelection:entry()?.planner?.selected||null,
       nextManeuverLookahead:entry()?.planner?.lookahead||null,
+      targetOffsetMeters:state.target?.offset??null,
+      progressMeters:state.progress,
+      distanceToTargetMeters:state.target?state.target.offset-state.progress:null,
+      zoom:map()?.getZoom?.()??null,
+      laneTrajectoryAvailable:!!usableTrajectory(),
       reason:state.reason,active:state.display,
       requesting:state.inflight
     })
