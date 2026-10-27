@@ -396,6 +396,19 @@ export function createJunctionDetail({
     },
     position:()=>state.target?.position||null,
     currentTarget:()=>state.target,
+    laneState:()=>{
+      if(!state.display||!state.target)return null;
+      const e=entry();
+      if(!e?.data)return {status:e?.status==='unavailable'?'unavailable':'loading',
+        description:e?.status==='unavailable'
+          ?'OSM lane geometry unavailable':'Preparing reconstructed lanes'};
+      if(e.corridor?.recommendation)return null;
+      return {
+        status:'road-level',
+        description:e.corridor?.reason||
+          'No reliable local lane trajectory for this junction'
+      };
+    },
     suggestedLanes:()=>{
       const target=state.target,rec=entry()?.corridor?.recommendation;
       const ahead=target?.offset-state.progress;
@@ -417,6 +430,7 @@ export function createJunctionDetail({
       plannedTrajectory:entry()?.planner?.status||'unavailable',
       corridorStatus:entry()?.corridor?.status||'unavailable',
       corridorReason:entry()?.corridor?.reason||'No corridor data',
+      corridorDiagnostics:entry()?.corridor?.diagnostics||null,
       corridorSamples:entry()?.corridor?.samples||0,
       corridorCoverage:entry()?.corridor?.coverage||[],
       hudLaneRecommendation:entry()?.corridor?.recommendation||null,
