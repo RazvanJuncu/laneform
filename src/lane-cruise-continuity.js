@@ -128,3 +128,27 @@ export function cruiseFromLaneContinuity({
   }
   return candidates.sort((a,b)=>a.distanceToJunction-b.distanceToJunction)[0]||null;
 }
+
+// Do not manufacture a "preferred" lane from width alone. Still tell the
+// driver when a stable multi-lane section is approaching / already present,
+// so Cruise wakes up when a new lane opens after a one-lane stretch.
+export function cruiseFromAvailableLanes({
+  laneFrames=[],progress=0,horizonMeters=260
+}={}){
+  if(!Array.isArray(laneFrames)||!Number.isFinite(progress))return null;
+  const valid=laneFrames.filter(safeFrame).sort((a,b)=>a.at-b.at);
+  for(const f of valid){
+    if(f.at<progress-10||f.at>progress+horizonMeters)continue;
+    const nearby=valid.filter(p=>p.laneCount===f.laneCount&&
+      p.road===f.road&&p.direction===f.direction&&
+      Math.abs(p.at-f.at)<=17&&p.offsets.every((v,i)=>
+        Math.abs(v-f.offsets[i])<=1.25));
+    if(nearby.length<3||Math.max(...nearby.map(p=>p.at))-
+      Math.min(...nearby.map(p=>p.at))<8)continue;
+    return {source:'glide',status:'inferred',kind:'cruise',
+      mode:'available',laneCount:f.laneCount,selected:[],
+      distanceToJunction:Math.max(0,f.at-progress),
+      reason:'Stable mapped lane group; no supported lane preference'};
+  }
+  return null;
+}
