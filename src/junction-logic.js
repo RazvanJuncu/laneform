@@ -48,7 +48,7 @@ export function junctionViewMode({
   if(dismissedId===target.id)return 'standard';
   if(forcedId===target.id)return 'detail';
   // Anticipatory automatic zoom only when geometry was prepared.
-  if(ahead>=-20 && ahead<=270)return 'detail';
+  if(ahead>=-20 && ahead<=380)return 'detail';
   // The driver can inspect a farther junction by zooming in near it.
   if(zoom>=18.0 && centerDistanceMeters<=350)return 'detail';
   return 'standard';
