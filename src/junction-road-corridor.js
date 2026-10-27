@@ -74,8 +74,17 @@ function selectedTurn(instruction,lookahead,d){
   return null;
 }
 function laneSide(instruction,lookahead,d){
-  const t=selectedTurn(instruction,lookahead,d);
-  return sideOf(t)||null;
+  const current=sideOf(expectedLaneTurn(instruction));
+  const at=instruction?.routeOffsetInMeters;
+  // Keep the entry/exit lane of the maneuver stable *through* the junction.
+  // A subsequent opposite turn must not teleport us sideways inside it.
+  if(current&&Number.isFinite(at)&&d>=at-130&&d<=at+45)
+    return current;
+  for(const next of lookahead||[]){
+    const gap=next?.offset-d,upcoming=sideOf(expectedLaneTurn(next?.instruction));
+    if(Number.isFinite(gap)&&gap>0&&gap<=350&&upcoming)return upcoming;
+  }
+  return null;
 }
 function choice(candidates,prev,prefer,turn){
   // The current route direction lies on the right side of a two-way street
@@ -90,7 +99,10 @@ function choice(candidates,prev,prefer,turn){
     group.reduce((s,c)=>s+c.offset,0)/group.length);
   const ranked=[...groups.values()].map(group=>{
     // A mapped turn-only arrow contrary to the routed movement excludes it.
-    const legal=group.filter(c=>!turn || !c.turns.length||c.turns.includes(turn));
+    const eligible=group.filter(c=>!turn || !c.turns.length||c.turns.includes(turn));
+    // Prefer actual mapped arrows for this movement where they exist.
+    const marked=turn?eligible.filter(c=>c.turns.includes(turn)):[];
+    const legal=marked.length?marked:eligible;
     if(!legal.length)return null;
     legal.sort((a,b)=>a.offset-b.offset); // driver's right -> left
     const byIndex=[...legal].sort((a,b)=>a.direction==='Backward'
@@ -195,7 +207,13 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
       }
     }
     const match=choice(candidates,prev,prefer,turn);
-    if(match){
+    if(match && prev && prev.road===match.road &&
+        prev.direction===match.direction&&prev.index!==match.index){
+      // A lane change needs a longitudinal transition; never draw an
+      // instantaneous diagonal between adjacent lane centers.
+      sampled.push(null);
+      prev=null;
+    }else if(match){
       sampled.push({d,point:match.point,road:match.road,
         direction:match.direction,index:match.index});
       prev=match;
