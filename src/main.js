@@ -1049,7 +1049,9 @@ function renderLaneAssistance(laneData,laneState=null){
     stage.append(caption,rail);
     return stage;
   }
-  const approach=laneRow(laneData,'Approach');
+  const approach=laneRow(laneData,
+    laneData.widensFrom?'Approach · widens from '+laneData.widensFrom:
+      'Approach');
   if(!approach)return;
   const info=document.createElement('span');
   info.className='lane-source';
