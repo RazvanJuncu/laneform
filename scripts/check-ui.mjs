@@ -71,9 +71,10 @@ assert.ok(css.includes('.search-sheet .result-donut'),
 assert.ok(js.includes("ring.className = 'result-donut'"),
   'Search result pin glyph must use donut rings');
 assert.ok(js.includes('splitPathByDistance(') &&
-  js.includes("stroke([traveled], '#73818B'") &&
+  js.includes("stroke(past,'#73818B'") &&
+  js.includes("routeOutsideLaneCoverage(") &&
   js.includes("junctionFocus?2.6:3.4"),
-  'Simulated route must keep a non-glowing gray trail and reduce stroke in junction detail');
+  'Simulated route must preserve the gray trail and clip road-level geometry only where a lane corridor exists');
 assert.ok(js.includes('requestDraw(); // update the muted traveled route'),
   'Route progress must be redrawn even when camera follow is off');
 assert.ok(js.includes('revealPreviewFromSearch(searchRect)'),
@@ -104,20 +105,24 @@ assert.ok(!js.includes('    startOsmLaneLookup();') &&
   js.includes("junctionDetail?.update(offset)") &&
   js.includes("buildLaneTimeline("),
   'Navigation must prepare one junction and avoid automatic corridor-wide OSM requests');
-assert.ok(js.includes("laneData.source==='osm'") &&
-  js.includes('Mapped turn arrows'),
-  'OSM markings must be labeled as unverified');
+assert.ok(js.includes("laneData?.source!=='glide'") &&
+  js.includes("laneData.status!=='inferred'") &&
+  js.includes("'Glide (inferred)'"),
+  'Glide HUD must show only provisional lane choices from the reconstructed map trajectory');
 assert.ok(html.includes('small OpenStreetMap extract') &&
   html.includes('reconstructs geometry locally'),
   'The navigator must describe the optional junction data source');
 assert.ok(js.includes("const text = query; // Worldwide search") &&
   !js.includes("query+', București, Romania'"),
   'Destination search must not be geographically restricted to Bucharest');
-assert.ok(js.includes('horizonMeters:1100') &&
-  js.includes("state.osmCoverageMeters"),
-  'Proactive lane lookahead and bounded corridor reporting must be implemented');
-assert.ok(js.includes("nextManeuver:nextState,instructions"),
-  'HUD lane cue must use actual next maneuver to block later intersections');
+assert.ok(js.includes("state.osmCoverageMeters") &&
+  js.includes("junctionDetail?.suggestedLanes()") &&
+  js.includes("junctionDetail?.laneState()"),
+  'OSM route coverage must stay visible and the lane HUD must use Junction Detail selections');
+assert.ok(js.includes("nextManeuverState(instructions,offset,realLength)") &&
+  js.includes("junctionDetail?.update(offset)") &&
+  js.includes("renderLaneAssistance(junctionDetail?.suggestedLanes(),"),
+  'Route maneuvers and the geometry planner must advance together, without an independent HUD lane engine');
 console.log('Glide route-ordered lane guidance regression wiring passed.');
 assert.ok(existing.has('junctionToggle') &&
   js.includes("buttonGetter:()=>$('junctionToggle')"),
