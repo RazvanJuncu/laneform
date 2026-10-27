@@ -80,11 +80,15 @@ assert.ok(js.includes('revealPreviewFromSearch(searchRect)'),
   'Centered selection must migrate gracefully to bottom preview');
 assert.ok(js.includes("getInstructionLanes") &&
   js.includes("extractRouteLaneGuidance(route, getInstructionLanes)"),
-  'Lane guidance must come only from the SDK response of the selected route');
-assert.ok(js.includes("chooseLaneLookahead(laneRecords(route),offset"),
-  'Lane guidance must look forward along the route, not only at announced turns');
-assert.ok(js.includes("renderLaneAssistance(laneData)"),
-  'Navigation HUD must update conditional lane assistance');
+  'Preserve route provider lane records for coverage diagnostics');
+assert.ok(js.includes("renderLaneAssistance(junctionDetail?.suggestedLanes())") &&
+  js.includes("onGuidanceChange:()=>") &&
+  !js.includes("renderLaneAssistance(laneData)"),
+  'The mini lane HUD must use exactly the lane selection painted by Junction Detail');
+assert.ok(css.includes('.glide-lane-cell.recommended') &&
+  css.includes('.lane-guidance[hidden]') &&
+  !js.includes('LANE_ARROWS'),
+  'Glide lane squares must light up without the old TomTom arrows');
 assert.ok(existing.has('laneCoverage') && css.includes('.lane-rail'),
   'User needs source coverage diagnostics and contextual lane visualization');
 assert.ok(existing.has('previewLaneStatus') &&
