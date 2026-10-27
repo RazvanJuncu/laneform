@@ -262,7 +262,9 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
     rejected:{type:0,geometry:0,road:0,index:0,direction:0},
     inferredDirectionPolygons:0,eligibleDrivingPolygons:0,crossSections:0,
     matchedSamples:0,continuousSections:0,approachSamples:0,
-    turnConnector:'not-required',turnConnectorGap:0
+    turnConnector:'not-required',turnConnectorGap:0,
+    turnConnectorMethod:null,turnRadiusMeters:null,
+    turnAngleDegrees:null
   };
   const result={status:'unavailable',path:empty(),coverage:[],samples:0,
     recommendation:null,diagnostics,
@@ -383,6 +385,9 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
     diagnostics.turnConnector=result.bridged?'smooth':
       'suppressed-unstable-junction';
     diagnostics.turnConnectorGap=result.gap||0;
+    diagnostics.turnConnectorMethod=result.method||null;
+    diagnostics.turnRadiusMeters=result.cornerRadiusMeters??null;
+    diagnostics.turnAngleDegrees=result.cornerAngleDegrees??null;
   }
   const pieces=[];let active=[];
   function close(){if(active.length>=3)pieces.push(active);active=[];}
