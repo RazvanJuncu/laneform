@@ -5,7 +5,7 @@ import vm from 'node:vm';
 const source=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
 const first=source.indexOf('function renderLaneAssistance(laneData,laneState=null){');
 const last=source.indexOf('\nfunction navCamera(',first);
-assert.ok(first>=0&&last>first,'Mini HUD renderer must exist');
+assert.ok(first>=0&&last>first,'HUD renderer must exist');
 const panel={
   children:[],hidden:true,
   replaceChildren(){this.children=[];},
@@ -24,48 +24,45 @@ const context={
 vm.createContext(context);
 vm.runInContext(source.slice(first,last)+'\nthis.drawHud=renderLaneAssistance;',context);
 const render=context.drawHud;
-render({source:'tomtom',status:'verified',lanes:[{recommended:true}]});
-assert.equal(panel.hidden,true,
-  'TomTom must never show a conflicting recommendation');
+const group=(count,index)=>({
+  source:'glide',status:'inferred',
+  laneCount:count,selected:[index]
+});
+render({source:'tomtom',status:'verified',selected:[0],laneCount:3});
+assert.equal(panel.hidden,true,'Never display TomTom lane arrows');
 render(null);
-assert.equal(panel.hidden,true,
-  'When no reconstructed approach lane is ready, leave the HUD hidden');
-render({source:'glide',status:'inferred',laneCount:3,
-  selected:[1],distanceToManeuver:310});
+assert.equal(panel.hidden,true,'No invented lane guidance without geometry');
+render({...group(3,1),distanceToManeuver:310});
 assert.equal(panel.hidden,false);
-assert.equal(panel.children.length,2);
-assert.match(panel.children[0].textContent,
-  /Suggested lanes · 310 m ahead · Glide \(inferred\)/);
-const squares=panel.children[1].children;
-assert.equal(squares.length,3,'One square per forward-direction driving lane');
-assert.deepEqual(squares.map(square=>
-  square.className.includes('recommended')),[false,true,false],
-  'Only the lane represented by the map trajectory lights up');
-assert.ok(squares.every(s=>s.children.length===0),
-  'No maneuver arrows inside the lane squares');
-assert.match(panel.children[1].attrs['aria-label'],/lane 2 of 3 highlighted/);
-render({source:'glide',status:'inferred',laneCount:2,
-  selected:[0],distanceToManeuver:95});
-assert.deepEqual(panel.children[1].children.map(s=>
-  s.className.includes('recommended')),[true,false],
-  'The highlight must update when the next chosen map lane changes');
-render({source:'glide',status:'inferred',laneCount:2,selected:[5]});
-assert.equal(panel.hidden,true,
-  'Invalid or out-of-range recommended lanes must not be displayed');
-render(null,{status:'road-level',
-  description:'No suitable reconstructed driving lane sections'});
-assert.equal(panel.hidden,false,
-  'During Junction Detail the missing lane information must be explained');
+assert.equal(panel.children.length,2,
+  'Before the exit threshold only the approach row is visible');
+assert.match(panel.children[0].textContent,/Suggested lanes · 310 m ahead/);
+const approach=panel.children[1];
+assert.equal(approach.children[0].textContent,'Approach');
+assert.deepEqual(approach.children[1].children.map(s=>
+  s.className.includes('recommended')),[false,true,false]);
+assert.ok(approach.children[1].children.every(s=>s.children.length===0),
+  'Squares must not contain arrows');
+render({...group(3,1),distanceToManeuver:110,exit:group(2,0)});
+assert.equal(panel.children.length,3,
+  'Both rows appear when the geometry model reveals an exit lane');
+assert.equal(panel.children[2].children[0].textContent,'After junction');
+assert.deepEqual(panel.children[2].children[1].children.map(s=>
+  s.className.includes('recommended')),[true,false]);
+assert.match(panel.children[2].children[1].attrs['aria-label'],
+  /After junction: 2 driving lanes, lane 1 of 2 highlighted/);
+render({...group(2,0),distanceToManeuver:95,exit:group(3,2)});
+assert.deepEqual(panel.children[2].children[1].children.map(s=>
+  s.className.includes('recommended')),[false,false,true],
+  'Exit row must follow the mapped destination lane, not reuse approach');
+render({...group(2,0),exit:{...group(2,0),selected:[8]}});
+assert.equal(panel.children.length,2,
+  'Invalid/uncertain exit lanes must be omitted instead of fabricated');
+render(null,{status:'road-level',description:'Missing local geometry'});
+assert.equal(panel.children.length,1);
 assert.match(panel.children[0].textContent,/road-level only/);
-assert.equal(panel.children.length,1,
-  'Do not render placeholder or invented recommendation squares');
-render(null,{status:'loading',description:'Preparing reconstructed lanes'});
+render(null,{status:'loading',description:'Preparing'});
 assert.match(panel.children[0].textContent,/reconstructing lanes/);
-render(null,{status:'trajectory-only',
-  description:'Mapped trajectory exists but the approach lane count is uncertain'});
-assert.equal(panel.hidden,false);
-assert.equal(panel.children.length,1,
-  'A trajectory without a reliable lane count must not invent squares');
-assert.match(panel.children[0].textContent,/inferred path · lanes uncertain/,
-  'Show visible Glide path as inferred, not incorrectly road-level');
-console.log('Glide arrowless lane HUD and corridor selection sync tests passed.');
+render(null,{status:'trajectory-only',description:'Unknown lane count'});
+assert.match(panel.children[0].textContent,/inferred path · lanes uncertain/);
+console.log('Glide two-stage square lane HUD checks passed.');
