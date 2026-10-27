@@ -110,10 +110,12 @@ osm2streets polygon matches through the junction center. Overlapping and
 truncated lane polygons created jagged paths despite valid entry/exit lanes.
 The `src/junction-turn-connector.js` trims unstable samples near the
 maneuver and seeks stable approach/exit lane samples with compatible headings.
-For near-orthogonal urban turns, it now computes the intersection of the
+For near-orthogonal urban turns, it computes the intersection of the
 approach and exit lane axes, preserves straight portions near that intersection,
-and rounds their corner with a short radius-limited Bézier fillet (target 4.5–9 m,
-depending on the lane geometry). This avoids the unrealistic long sweeping arc
+and rounds their corner with a short radius-limited Bézier fillet (target 4.5–7 m,
+depending on the lane geometry). If a sharp turn has incompatible lane axes,
+Glide now declines the entire sweeping cubic fallback and keeps road-level
+guidance across the unsupported transition instead. This avoids the unrealistic long sweeping arc
 created by connecting far-apart lane endpoints with one cubic. Oblique turns can
 retain the original gentle interpolation. Every result still checks forward
 progress, gaps and proximity to the chosen TomTom road corridor. The resulting smooth path remains provisional. When
@@ -161,7 +163,11 @@ the planning engine. Geometry filtering is in
 The top-left HUD shows two different rows of arrowless lane squares:
 
 - **Approach**: which mapped lane Glide selects before the intersection,
-  available early once the area's geometry has been reconstructed.
+  available early once the area's geometry has been reconstructed. If OSM
+  identifies a stable new turning lane that appears only in the final
+  approach, Glide initially shows the actual upstream count and then (within
+  160 m) switches to the near-junction count, labeled `widens from 1`,
+  rather than misleadingly claiming the extra lane already exists upstream.
 - **After junction**: the mapped lane sampled on the *outgoing* route, shown
   only when the maneuver is within **115 metres**. If there is no stable
   mapped exit-lane count, the second row is omitted rather than guessed.
