@@ -25,12 +25,12 @@ vm.runInContext(source.slice(start,end)+
   '\nthis.renderCruiseGuidance=renderCruiseGuidance;',sandbox);
 const render=sandbox.renderCruiseGuidance;
 render(null);
-assert.equal(panel.children.length,2);
-assert.equal(panel.children[0].textContent,'Cruise');
-assert.match(panel.children[1].textContent,/lanes unverified/,
-  'Cruise is persistent but neutral without strong evidence');
+assert.equal(panel.children.length,0);
+assert.equal(panel.hidden,true,
+  'No Cruise status when no meaningful multi-lane choice exists');
 render({source:'glide',kind:'cruise',status:'inferred',
   laneCount:3,selected:[1],turnOnly:[0],distanceToJunction:140});
+assert.equal(panel.hidden,false);
 assert.equal(panel.children.length,3);
 assert.match(panel.children[1].textContent,/140 m/);
 assert.equal(panel.children[2].children.length,3);
@@ -47,6 +47,7 @@ assert.match(panel.title,/No turn-only restrictions verified/,
   'Geometry-derived Cruise must not claim verified turn-only lanes');
 assert.equal(panel.children[2].children.length,2);
 render(null);
-assert.equal(panel.children.length,2,
+assert.equal(panel.hidden,true);
+assert.equal(panel.children.length,0,
   'Loss of OSM evidence must remove stale lane selection immediately');
 console.log('Glide persistent slim cruise HUD tests passed.');
