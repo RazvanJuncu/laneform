@@ -6,6 +6,7 @@ import {routeProfile,positionAtDistance} from './osm-lane-geometry.js';
 import {expectedLaneTurn} from './lane-path-candidates.js';
 import {smoothMappedTurn} from './junction-turn-connector.js';
 import {suppressLaneSamplingSpikes} from './lane-sampling-filter.js';
+import {splitImplausibleThroughPath} from './lane-straight-sanity.js';
 
 const RAD=Math.PI/180;
 const SAMPLE=5;
@@ -266,7 +267,7 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
     turnConnector:'not-required',turnConnectorGap:0,
     turnConnectorMethod:null,turnRadiusMeters:null,
     turnAngleDegrees:null,triangleSpikesCorrected:0,
-    triangleSpikesDiscarded:0
+    triangleSpikesDiscarded:0,throughKinksRejected:0
   };
   const result={status:'unavailable',path:empty(),coverage:[],samples:0,
     recommendation:null,nearApproachRecommendation:null,
@@ -432,8 +433,16 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
     active.push(s);
   }
   close();
-  diagnostics.continuousSections=pieces.length;
-  if(!pieces.length){
+  const straight=expectedLaneTurn(instruction)==='through';
+  const safePieces=straight?pieces.flatMap(part=>{
+    const checked=splitImplausibleThroughPath(part,{
+      profile,positionAtDistance
+    });
+    diagnostics.throughKinksRejected+=checked.rejected;
+    return checked.pieces;
+  }):pieces;
+  diagnostics.continuousSections=safePieces.length;
+  if(!safePieces.length){
     result.reason=diagnostics.crossSections===0
       ?'No driving-lane polygon overlaps the selected route corridor'
       :diagnostics.matchedSamples===0
@@ -442,7 +451,7 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
     return result;
   }
   const features=[],coverage=[],eligibleApproaches=[],eligibleExits=[];
-  for(const part of pieces){
+  for(const part of safePieces){
     const beginning=part[0].d/scale,ending=part.at(-1).d/scale;
     // Small orphan lane fragments are useful for OSM debugging, but they
     // create misleading little floating green lines in Junction Detail.
