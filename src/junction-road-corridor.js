@@ -267,7 +267,8 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
     turnAngleDegrees:null
   };
   const result={status:'unavailable',path:empty(),coverage:[],samples:0,
-    recommendation:null,exitRecommendation:null,diagnostics,
+    recommendation:null,nearApproachRecommendation:null,
+    exitRecommendation:null,diagnostics,
     reason:'No suitable reconstructed driving lane sections'};
   // osm2streets lane polygons do not model ordered entry/circulation/exit
   // transitions through large roundabouts reliably. Reusing the ordinary
@@ -487,12 +488,38 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
       p.laneOrdinal===first.laneOrdinal&&p.laneCount===first.laneCount);
     if(agreeing.length<Math.min(2,peers.length))first=null;
   }
-  const recommendation=first
-    ?{source:'glide',status:'inferred',laneCount:first.laneCount,
-      selected:[first.laneOrdinal],laneIndex:first.index,
-      road:first.road,direction:first.direction,
-      sampleOffsetMeters:first.at,junctionOffsetMeters:offset}
-    :null;
+  function hudRecord(sample){
+    if(!sample)return null;
+    return {source:'glide',status:'inferred',laneCount:sample.laneCount,
+      selected:[sample.laneOrdinal],laneIndex:sample.index,
+      road:sample.road,direction:sample.direction,
+      sampleOffsetMeters:sample.at,junctionOffsetMeters:offset};
+  }
+  const recommendation=hudRecord(first);
+  // A road can add a dedicated left/right-turn lane just before the
+  // junction. The normal sample ~55m upstream may still show one lane.
+  // Locate a stable, more recent group on the same routed trajectory; do not
+  // claim the extra lane exists at the driver's current position.
+  const nearCandidates=eligibleApproaches.filter(p=>
+    p.at>=offset-48&&p.at<=offset-9);
+  function nearSupport(candidate){
+    const peers=nearCandidates.filter(p=>
+      p.road===candidate.road&&p.direction===candidate.direction&&
+      p.laneCount===candidate.laneCount&&
+      p.laneOrdinal===candidate.laneOrdinal&&
+      Math.abs(p.at-candidate.at)<=16);
+    return peers.length>=2&&
+      Math.max(...peers.map(p=>p.at))-Math.min(...peers.map(p=>p.at))>=3;
+  }
+  // Prefer the expanded group ONLY if it is supported by multiple adjacent
+  // mapped samples and corresponds to a physically displayed lane path.
+  const expanded=nearCandidates.filter(p=>
+    p.laneCount>(recommendation?.laneCount||0)&&nearSupport(p))
+    .sort((a,b)=>b.laneCount-a.laneCount||
+      Math.abs(a.at-(offset-23))-Math.abs(b.at-(offset-23)));
+  const nearApproachRecommendation=hudRecord(expanded[0]);
+  diagnostics.nearApproachSamples=nearCandidates.length;
+  diagnostics.wideningLaneCount=nearApproachRecommendation?.laneCount||null;
   // Select the first stable mapped exit, near ~45 m after the maneuver.
   // Synthetic Bézier points do not carry lane metadata and are excluded.
   eligibleExits.sort((a,b)=>
@@ -514,7 +541,8 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
     :null;
   diagnostics.exitSamples=eligibleExits.length;
   return {status:'provisional',path:{type:'FeatureCollection',features},
-    coverage,recommendation,exitRecommendation,diagnostics,
+    coverage,recommendation,nearApproachRecommendation,
+    exitRecommendation,diagnostics,
     samples:features.reduce((n,f)=>n+f.geometry.coordinates.length,0),
     reason:recommendation
       ?'Lane corridor and upstream lane selection reconstructed'
