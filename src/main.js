@@ -11,6 +11,7 @@ import { deriveOsmLaneRecords } from './osm-lane-geometry.js';
 import { laneEventsFromCorridor, buildLaneTimeline }
   from './lane-lookahead.js';
 import {createJunctionDetail} from './junction-detail.js';
+import {visibleLaneTrajectorySegments} from './lane-trajectory-overlay.js';
 import {MAX_TRAFFIC_TILE_ATTEMPTS,EMPTY_TRAFFIC_TILE,isTomTomTrafficTile,
   trafficTileBudget} from './traffic-budget.js';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -439,7 +440,8 @@ function drawRoutes() {
     // The traveled section is a matte graphite line. No halo, shadow,
     // platinum core or extra trail; only the road ahead is illuminated.
     const junctionFocus=junctionDetail?.active()===true;
-    const laneCoverage=junctionFocus?junctionDetail?.coverage()||[]:[];
+    const laneTrajectory=junctionFocus?junctionDetail?.trajectory():null;
+    const laneCoverage=laneTrajectory?.coverage||[];
     const realLength=feature.properties?.summary?.lengthInMeters;
     if(traveled.length>=2){
       const past=laneCoverage.length
@@ -471,6 +473,17 @@ function drawRoutes() {
       }else{
         stroke([remaining], ROUTE_HALO, 7.5, .14, 5);
         stroke([remaining], SIGNAL, 5.2, .99);
+      }
+    }
+    // Same topmost canvas as the route preview. The lane path takes absolute
+    // visual precedence over TomTom's roadway centerline, and the centerline
+    // has already been clipped to avoid drawing beneath this local section.
+    if(laneTrajectory){
+      const laneSegments=visibleLaneTrajectorySegments(
+        laneTrajectory,sim.length?sim.distance/sim.length*realLength:0);
+      if(laneSegments.length){
+        stroke(laneSegments,'#65E9C5',8,.20,4);
+        stroke(laneSegments,'#BDF8E8',3.8,.98);
       }
     }
     return;
@@ -1202,6 +1215,9 @@ function attachEvents() {
         navCamera(along(state.sim.distance),true);
     },
     onGuidanceChange:()=>{
+      // Geometry frequently arrives while the user has playback PAUSED.
+      // Redraw the route canvas immediately, not just the compact HUD.
+      requestDraw();
       if(state.sim.active)
         renderLaneAssistance(junctionDetail?.suggestedLanes(),
           junctionDetail?.laneState());
