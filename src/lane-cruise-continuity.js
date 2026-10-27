@@ -62,7 +62,7 @@ export function cruiseFromLaneContinuity({
   if(frames.length<5)return null;
   // Retain nearby samples for stable grouping when within ~30 metres of
   // the widening. Do not drop the whole lane signal at its most useful time.
-  const future=frames.filter(f=>f.at>=progress+8&&
+  const future=frames.filter(f=>f.at>=progress-155&&
     f.at<=progress+horizonMeters);
   const candidates=[];
   const seen=new Set();
@@ -76,7 +76,8 @@ export function cruiseFromLaneContinuity({
       if(!post||post.n!==pre.n-1||post.direction!==pre.direction)
         continue;
       const gap=post.at-pre.at;
-      if(gap<18||gap>155)continue;
+      if(gap<18||gap>155||post.at<progress+10||
+        pre.at<progress-150)continue;
       const mapping=continuity(pre,post);
       if(!mapping)continue;
       const drop=[...Array(pre.n).keys()].filter(i=>
@@ -117,7 +118,8 @@ export function cruiseFromLaneContinuity({
         laneCount:shownCount,selected:[shownSelected],
         allowedThrough:shownCount===pre.n?mapping.indices:[shownSelected],
         nonContinuing:shownDrop,upcomingLaneCount:anticipatedWidening,
-        distanceToJunction:pre.at-progress,
+        distanceToJunction:post.at-progress,
+        wideningDistanceMeters:pre.at-progress,
         reason:'Repeated mapped cross-sections show a lane does not continue on the routed carriageway',
         offset:pre.at,confidence:'provisional'
       });
