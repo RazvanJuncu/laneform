@@ -82,9 +82,13 @@ assert.ok(view.includes("const FOCUS_SOURCE='glide-junction-focus'") &&
   'Context arms should be subdued relative to route-adjacent lane shapes');
 assert.ok(main.includes('junctionFocus?2.6:3.4') &&
   main.includes('routeOutsideLaneCoverage(') &&
+  main.includes('visibleLaneTrajectorySegments(') &&
+  main.includes("stroke(laneSegments,'#BDF8E8',3.8,.98)") &&
+  main.includes('window.glideLanePaintInfo=') &&
   view.includes('buildLaneCorridor(') &&
-  view.includes("corridor?.status==='provisional'?corridor.path:EMPTY"),
-  'Detailed view must draw reconstructed lane corridors and clip only the covered centerline');
+  view.includes('trajectory:()=>') &&
+  view.includes("const actual=(id===IDS[8]||id===IDS[9])?'none':v"),
+  'Lane trajectory must be drawn on the same topmost canvas as TomTom, with only non-covered centerline segments');
 assert.ok(view.includes('net.toGeojsonPlain()') &&
   view.includes('buildJunctionOrdinalCandidates('),
   'Real osm2streets road-level connections must feed provisional lane pairing');
