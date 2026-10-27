@@ -10,7 +10,7 @@ import {simplifiedJunctionGeometry} from './junction-simplified-map.js';
 import {twoStageLaneGuidance} from './lane-hud-model.js';
 import {sampleImportantThroughJunctions}
   from './junction-straight-sampling.js';
-import {candidateApproachLanePaths} from './lane-path-candidates.js';
+import {candidateApproachLanePaths,expectedLaneTurn} from './lane-path-candidates.js';
 import {buildJunctionOrdinalCandidates} from './junction-lane-bridge.js';
 import {planJunctionTrajectory} from './junction-driver-planner.js';
 import {buildLaneCorridor} from './junction-road-corridor.js';
@@ -479,10 +479,17 @@ export function createJunctionDetail({
       const ahead=g?.offset-state.progress;
       // Even a straight-through OSM crossing uses the exact lane corridor
       // drawn on the map; nothing independent is invented for the HUD.
+      const currentInstruction=g?.kind==='maneuver'
+        ?state.route?.properties?.guidance?.instructions?.[state.target?.index]
+        :null;
+      const maneuver=expectedLaneTurn(currentInstruction);
+      const selectedTurnSide=/left/.test(maneuver||'')?'left':
+        /right/.test(maneuver||'')?'right':null;
       const value=twoStageLaneGuidance(
         g?.corridor?.recommendation,
         g?.corridor?.exitRecommendation,ahead,{
-          nearApproach:g?.corridor?.nearApproachRecommendation
+          nearApproach:g?.corridor?.nearApproachRecommendation,
+          selectedTurnSide
         });
       return value?{...value,kind:g.kind}:null;
     },
