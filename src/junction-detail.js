@@ -8,6 +8,8 @@ import {smallAreaOsmUrl,MAX_OSM_BYTES,validateOsmXML,
 import {partitionJunctionGeometry} from './junction-focus.js';
 import {simplifiedJunctionGeometry} from './junction-simplified-map.js';
 import {twoStageLaneGuidance} from './lane-hud-model.js';
+import {isJunctionPhase,stableMappedLaneGroup}
+  from './lane-junction-policy.js';
 import {cruiseFromMappedLanes,cruiseFromRouteAlignment} from './lane-cruise.js';
 import {cruiseFromLaneContinuity} from './lane-cruise-continuity.js';
 import {nextRollingStation,rollingAreaPoint,ROLLING_AREA_RADIUS_METERS}
@@ -202,6 +204,19 @@ export function createJunctionDetail({
     return straight
       ?{kind:'through',offset:straight.offset,corridor:straight.corridor}
       :{kind:'maneuver',offset:target.offset,corridor:e?.corridor};
+  }
+  function junctionPhase(){
+    if(!state.route)return false;
+    const crossing=(entry()?.throughGuidance||[])
+      .filter(t=>Number.isFinite(t.offset)&&
+        t.offset-state.progress>=-35&&
+        t.offset-state.progress<=200)
+      .sort((a,b)=>a.offset-b.offset)[0];
+    return isJunctionPhase({
+      targetOffset:state.target?.offset,
+      throughOffset:crossing?.offset??null,
+      progress:state.progress
+    });
   }
   function cruiseHint(){
     if(!state.route)return null;
@@ -636,30 +651,33 @@ export function createJunctionDetail({
           'No reliable local lane trajectory for this junction'
       };
     },
-    cruise:()=>cruiseHint(),
+    guidanceMode:()=>junctionPhase()?'junction':'cruise',
+    cruise:()=>junctionPhase()?null:cruiseHint(),
     suggestedLanes:()=>{
+      if(!junctionPhase())return null;
       const g=activeGuidance();
-      // Ordinary straight-ahead lanes belong in the compact persistent
-      // CRUISE strip, never duplicate the large turn-preparation HUD.
-      if(g?.kind==='through'||
-        (g?.kind==='maneuver'&&expectedLaneTurn(
-          state.route?.properties?.guidance?.instructions?.[
-            state.target?.index])==='through'))return null;
-      const ahead=g?.offset-state.progress;
-      // Even a straight-through OSM crossing uses the exact lane corridor
-      // drawn on the map; nothing independent is invented for the HUD.
-      const currentInstruction=g?.kind==='maneuver'
+      if(!g?.corridor)return null;
+      const ahead=g.offset-state.progress;
+      const instruction=g.kind==='maneuver'
         ?state.route?.properties?.guidance?.instructions?.[state.target?.index]
         :null;
-      const maneuver=expectedLaneTurn(currentInstruction);
+      const maneuver=expectedLaneTurn(instruction);
       const selectedTurnSide=/left/.test(maneuver||'')?'left':
         /right/.test(maneuver||'')?'right':null;
-      const value=twoStageLaneGuidance(
-        g?.corridor?.recommendation,
-        g?.corridor?.exitRecommendation,ahead,{
-          nearApproach:g?.corridor?.nearApproachRecommendation,
-          selectedTurnSide
+      const frames=g.corridor.laneFrames||[];
+      // The green corridor may have a reliable lane GROUP but no stable
+      // ordinal for its chosen sample. Use several consecutive OSM
+      // cross-sections to supply a count; never invent a road width.
+      const approach=g.corridor.recommendation||
+        stableMappedLaneGroup(frames,g.offset,selectedTurnSide||'through');
+      const exit=g.corridor.exitRecommendation||
+        stableMappedLaneGroup(frames,g.offset,selectedTurnSide||'through',{
+          after:true
         });
+      const value=twoStageLaneGuidance(approach,exit,ahead,{
+        nearApproach:g.corridor.nearApproachRecommendation,
+        selectedTurnSide
+      });
       return value?{...value,kind:g.kind}:null;
     },
     info:()=>({
@@ -688,6 +706,7 @@ export function createJunctionDetail({
         corridorStatus:t.corridor?.status||'unavailable'
       }))||[],
       activeGuidanceKind:activeGuidance()?.kind||null,
+      guidanceMode:junctionPhase()?'junction':'cruise',
       cruiseGuidance:cruiseHint(),
       rollingCoverage:{
         requestedStations:state.rollingAttempts,
