@@ -118,4 +118,44 @@ assert.ok(opaqueResult.diagnostics.crossSections>0,
   'Real lane cross sections must be sampled before route rendering');
 assert.ok(opaqueResult.diagnostics.schemaSamples.length>0);
 
+
+// Some older osm2streets exports omit lane direction but retain motor-vehicle
+// polygons. A *provisional map line* may be inferred on the right-hand side,
+// but the HUD must not assert a lane ordinal without reliable metadata.
+const withoutDirection=twoForward.map(f=>({
+  ...f,properties:{...f.properties,direction:undefined}
+}));
+const inferred=buildLaneCorridor({
+  route,offset:profile.length/2,lanes:withoutDirection,radius:100
+});
+assert.equal(inferred.status,'provisional',
+  'Carriageway geometry can still power a provisional map path');
+assert.equal(inferred.recommendation,null,
+  'Never claim known lane counts when the OSM lane direction is missing');
+assert.ok(inferred.diagnostics.inferredDirectionPolygons>0);
+const alternateSchema=twoForward.map(f=>({
+  ...f,properties:{
+    ...f.properties,type:undefined,lane_type:'Driving',
+    road:undefined,road_id:String(f.properties.road),
+    index:undefined,lane_index:String(f.properties.index),
+    direction:String(f.properties.direction).toLowerCase()
+  }
+}));
+const adapted=buildLaneCorridor({
+  route,offset:profile.length/2,lanes:alternateSchema,radius:100
+});
+assert.equal(adapted.status,'provisional',
+  'Adapt supported aliases instead of dropping every mapped driving polygon');
+assert.deepEqual(adapted.recommendation?.selected,[1]);
+const noType=twoForward.map(f=>({
+  ...f,properties:{road:f.properties.road,index:f.properties.index,
+    direction:f.properties.direction}
+}));
+const unsafe=buildLaneCorridor({
+  route,offset:profile.length/2,lanes:noType,radius:100
+});
+assert.equal(unsafe.status,'unavailable',
+  'Never infer that unknown polygon types are motor-vehicle lanes');
+assert.equal(unsafe.diagnostics.rejected.type,noType.length);
+
 console.log('Glide geometry-first lane-corridor regression tests passed.');
