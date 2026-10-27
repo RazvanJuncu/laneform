@@ -31,6 +31,11 @@ const result=smoothMappedTurn(samples,{
   }
 });
 assert.equal(result.bridged,true,'Two stable lane arms should connect');
+assert.equal(result.method,'compact-corner',
+  'A 90-degree urban turn should use a short-radius fillet, not a broad cubic arc');
+assert.ok(result.cornerRadiusMeters>=3.5&&result.cornerRadiusMeters<=9.1,
+  'Keep the illustrative 90-degree turn radius compact');
+assert.ok(Math.abs(result.cornerAngleDegrees-90)<2);
 assert.ok(result.gap>25);
 const bridge=result.samples.filter(s=>s?.syntheticTurn);
 assert.ok(bridge.length>=5,
@@ -46,6 +51,33 @@ assert.ok(end[0]>=local(55,-8)[0] && end[0]<=local(77,8)[0],
   'The bridge must remain near the actual intersection');
 assert.ok(points.some(p=>meters(p,local(60,12))<5),
   'The bridge should meet the intended exit arm');
+// 10 metres before the lane-axis intersection the approach should still
+// be almost straight; the older full-span cubic started bending too soon.
+const beforeCorner=result.samples.filter(x=>x?.syntheticTurn)
+  .filter(x=>{
+    const xMeters=(x.point[0]-origin[0])*111320*Math.cos(lat*Math.PI/180);
+    return xMeters>45&&xMeters<50;
+  });
+assert.ok(beforeCorner.length>0);
+assert.ok(beforeCorner.every(x=>
+  Math.abs((x.point[1]-origin[1])*110540)<.65),
+  'Keep approach straight until near the corner, then turn sharply');
+const rightSamples=samples.map(sample=>{
+  if(sample.d<=45)return sample;
+  if(sample.d>=75)return {...sample,
+    point:local(60,-(sample.d-60))};
+  return sample;
+});
+const right=smoothMappedTurn(rightSamples,{
+  turnDistance:60,
+  routeDistance:()=>0
+});
+assert.equal(right.bridged,true);
+assert.equal(right.method,'compact-corner',
+  'Clockwise right-angle turns should be compact too');
+assert.ok(right.samples.filter(x=>x?.syntheticTurn)
+  .some(x=>x.point[1]<lat),
+  'Right-hand corner must turn toward its intended exit side');
 const safety=smoothMappedTurn(samples,{
   turnDistance:60,
   routeDistance:()=>250
