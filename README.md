@@ -122,6 +122,23 @@ Unit and integration tests: `scripts/check-junction-turn-connector.mjs` and
 `glideJunctionInfo().corridorDiagnostics.turnConnector`: `smooth`,
 `suppressed-unstable-junction`, or `not-required`.
 
+### Junction integrity safeguards
+
+Complicated junctions can contain overlapping, discontinuous or degenerate
+osm2streets driving-lane polygons. The lane corridor now omits fragments
+shorter than 24 m and does not auto-interpolate through a turning maneuver
+that the dedicated turn-connector rejected. This is deliberately more
+conservative than drawing disconnected green fragments as a complete
+lane-level route.
+
+**Roundabouts:** No provisional circulation lane is inferred from ordinary
+road-centre samples. ROUNDABOUT/ROTARY/TRAFFIC_CIRCLE maneuvers fall back
+to TomTom's road-level route and do not display inferred lane squares.
+A dedicated entry/circulation/exit graph (with turn restrictions and
+directionality) is needed before enabling roundabout lane suggestions.
+This protects against false guidance but does not fix missing OSM geometry.
+The existing corridor tests cover the roundabout fallback and orphan fragments.
+
 ### Glide lane quick-check HUD
 
 The lane strip in the top-left maneuver console is **not TomTom's turn-arrow
