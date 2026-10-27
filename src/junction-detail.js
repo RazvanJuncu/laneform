@@ -9,6 +9,10 @@ import {partitionJunctionGeometry} from './junction-focus.js';
 import {simplifiedJunctionGeometry} from './junction-simplified-map.js';
 import {twoStageLaneGuidance} from './lane-hud-model.js';
 import {cruiseFromMappedLanes,cruiseFromRouteAlignment} from './lane-cruise.js';
+import {cruiseFromLaneContinuity} from './lane-cruise-continuity.js';
+import {nextRollingStation,rollingAreaPoint,ROLLING_AREA_RADIUS_METERS}
+  from './cruise-rolling-window.js';
+import {routeProfile,positionAtDistance} from './osm-lane-geometry.js';
 import {sampleImportantThroughJunctions}
   from './junction-straight-sampling.js';
 import {candidateApproachLanePaths,expectedLaneTurn} from './lane-path-candidates.js';
@@ -70,8 +74,8 @@ async function reconstruct(xml){
     };
   }finally{net?.free?.();}
 }
-async function downloadJunction(position){
-  const url=smallAreaOsmUrl(position,135);
+async function downloadJunction(position,radiusMeters=135){
+  const url=smallAreaOsmUrl(position,radiusMeters);
   const aborter=new AbortController();
   const timer=setTimeout(()=>aborter.abort(),12000);
   try{
@@ -175,7 +179,8 @@ export function createJunctionDetail({
     cache:new Map(),inflight:false,lastCall:0,generation:0,
     display:false,forced:null,dismissed:null,
     progress:0,route:null,reason:'not-requested',userZooming:false,
-    pendingTimer:null
+    pendingTimer:null,rollingPendingTimer:null,rollingCache:new Map(),
+    rollingAttempts:0,rollingLastStation:null
   };
   const map=()=>mapGetter?.();
   const button=()=>buttonGetter?.();
@@ -199,14 +204,8 @@ export function createJunctionDetail({
       :{kind:'maneuver',offset:target.offset,corridor:e?.corridor};
   }
   function cruiseHint(){
-    const e=entry(),target=state.target;
-    if(!e?.data||!state.route||!target)return null;
-    // Include explicit TomTom STRAIGHT instructions as through candidates,
-    // plus 3+arm crossings discovered independently from cached osm2streets.
-    const instruction=state.route.properties?.guidance?.instructions?.[target.index];
-    const through=(e.throughGuidance||[]).slice();
-    if(expectedLaneTurn(instruction)==='through'&&e.corridor)
-      through.push({offset:target.offset,corridor:e.corridor});
+    if(!state.route)return null;
+    const target=state.target,e=entry();
     const upcoming=state.targets.map(t=>({
       offset:t.offset,
       turn:expectedLaneTurn(
@@ -214,22 +213,50 @@ export function createJunctionDetail({
     })).filter(t=>/left|right/.test(t.turn||'')&&
       t.offset>state.progress);
     const nearest=upcoming[0];
-    const explicit=cruiseFromMappedLanes({
-      laneFeatures:e.data.lanes?.features||[],
-      throughGuidance:through,progress:state.progress,
-      nextTurnOffset:nearest?.offset??null,
-      nextTurnDirection:/left/.test(nearest?.turn||'')?'left':
-        /right/.test(nearest?.turn||'')?'right':null
-    });
-    if(explicit)return explicit;
-    // Fallback only when our already-rendered approach corridor has a
-    // stable mapped lane ordinal. Never label it a through-safe lane.
-    return cruiseFromRouteAlignment({
-      corridor:e.corridor,
+    const side=/left/.test(nearest?.turn||'')?'left':
+      /right/.test(nearest?.turn||'')?'right':null;
+    // Roll along actual routed geometry even if TomTom has not issued ANY
+    // instruction at the intervening split. Each cached OSM area can have
+    // its own local road IDs, so never splice them into a false global graph.
+    const batches=[
+      ...(e?.data?[{data:e.data,corridor:e.corridor,
+        throughGuidance:e.throughGuidance||[]}]:[]),
+      ...[...state.rollingCache.values()].filter(x=>x.data)
+    ];
+    const matches=[];
+    for(const batch of batches){
+      const through=[...(batch.throughGuidance||[])];
+      if(target&&batch.data===e?.data&&
+        expectedLaneTurn(state.route.properties?.guidance?.
+          instructions?.[target.index])==='through'&&batch.corridor)
+        through.push({offset:target.offset,corridor:batch.corridor});
+      const explicit=cruiseFromMappedLanes({
+        laneFeatures:batch.data.lanes?.features||[],
+        throughGuidance:through,progress:state.progress,
+        nextTurnOffset:nearest?.offset??null,nextTurnDirection:side
+      });
+      if(explicit)matches.push(explicit);
+      const continuity=cruiseFromLaneContinuity({
+        laneFrames:batch.corridor?.laneFrames||[],
+        progress:state.progress,nextTurnOffset:nearest?.offset??null,
+        nextTurnDirection:side
+      });
+      if(continuity)matches.push(continuity);
+    }
+    if(matches.length){
+      matches.sort((a,b)=>
+        a.distanceToJunction-b.distanceToJunction||
+        (a.mode==='turn-only'?-1:1));
+      return matches[0];
+    }
+    const current=target&&state.route.properties?.guidance?.
+      instructions?.[target.index];
+    return target?cruiseFromRouteAlignment({
+      corridor:e?.corridor,
       distanceToManeuver:target.offset-state.progress,
-      turnDirection:/left/.test(expectedLaneTurn(instruction)||'')?'left':
-        /right/.test(expectedLaneTurn(instruction)||'')?'right':null
-    });
+      turnDirection:/left/.test(expectedLaneTurn(current)||'')?'left':
+        /right/.test(expectedLaneTurn(current)||'')?'right':null
+    }):null;
   }
   function usableTrajectory(){
     if(!state.route||!state.target)return null;
@@ -397,6 +424,94 @@ export function createJunctionDetail({
           // the request ran, prepare the new target after the cooldown.
           if(state.target && junctionCacheKey(state.target.position)!==key)
             ensureNextPrepared();
+          ensureRollingPrepared();
+        }
+      }
+    })();
+  }
+  function clearRollingPending(){
+    if(state.rollingPendingTimer!==null)clearTimeout(state.rollingPendingTimer);
+    state.rollingPendingTimer=null;
+  }
+  function ensureRollingPrepared(){
+    if(!state.route)return;
+    const total=state.route.properties?.summary?.lengthInMeters;
+    const station=nextRollingStation(state.progress,total);
+    state.rollingLastStation=station;
+    if(station===null||state.rollingCache.has(station))return;
+    // Existing targeted junction has priority. Maintain one OSM request at
+    // a time with the same 30 s cooldown as Junction Detail. Never request
+    // OSM (or TomTom!) on every 5m sampling or animation tick.
+    if(state.inflight)return;
+    const target=state.target;
+    if(target&&Math.abs(target.offset-station)<95&&
+      entry()?.data){
+      const reused=entry().data;
+      const scan=buildLaneCorridor({
+        route:state.route,offset:station,
+        instruction:{maneuver:'STRAIGHT',routeOffsetInMeters:station},
+        lanes:reused.lanes?.features||[],radius:155
+      });
+      state.rollingCache.set(station,{
+        data:reused,corridor:scan,throughGuidance:[]});
+      onGuidanceChange();return;
+    }
+    const cooldown=COOLDOWN_MS-(Date.now()-state.lastCall);
+    if(cooldown>0){
+      if(state.rollingPendingTimer!==null)return;
+      const generation=state.generation;
+      state.rollingPendingTimer=setTimeout(()=>{
+        state.rollingPendingTimer=null;
+        if(generation===state.generation)ensureRollingPrepared();
+      },cooldown+35);
+      return;
+    }
+    const point=rollingAreaPoint(state.route,station,routeProfile,
+      positionAtDistance);
+    if(!point)return;
+    clearRollingPending();
+    state.inflight=true;state.lastCall=Date.now();
+    state.rollingAttempts++;
+    const generation=state.generation;
+    void (async()=>{
+      try{
+        const xml=await downloadJunction(point,ROLLING_AREA_RADIUS_METERS);
+        const data=await reconstruct(xml);
+        if(generation!==state.generation)return;
+        const corridor=buildLaneCorridor({
+          route:state.route,offset:station,
+          instruction:{maneuver:'STRAIGHT',routeOffsetInMeters:station},
+          lanes:data.lanes.features,radius:185
+        });
+        // Discover crosses inside THIS rolling OSM area independent of any
+        // provider turn notification.
+        const crosses=sampleImportantThroughJunctions({
+          route:state.route,roads:data.roads?.features||[],
+          centerOffset:station+165,excludeOffsets:state.targets.map(t=>t.offset),
+          beforeMeters:330
+        }).slice(0,3).map(cross=>({
+          ...cross,corridor:buildLaneCorridor({
+            route:state.route,offset:cross.offset,
+            instruction:{maneuver:'STRAIGHT',
+              routeOffsetInMeters:cross.offset},
+            lanes:data.lanes.features,radius:105
+          })
+        }));
+        state.rollingCache.set(station,{
+          data,corridor,throughGuidance:crosses});
+      }catch(error){
+        if(generation!==state.generation)return;
+        state.rollingCache.set(station,{data:null,error:String(error)});
+        console.info('Glide optional rolling road geometry:',error?.message);
+      }finally{
+        if(generation===state.generation){
+          state.inflight=false;
+          while(state.rollingCache.size>7)
+            state.rollingCache.delete(state.rollingCache.keys().next().value);
+          onGuidanceChange();
+          if(state.target&&!state.cache.has(junctionCacheKey(state.target.position)))
+            ensureNextPrepared();
+          else ensureRollingPrepared();
         }
       }
     })();
@@ -426,6 +541,7 @@ export function createJunctionDetail({
     const next=upcomingJunction(state.targets,progress);
     setTarget(next);
     updateAppearance();
+    ensureRollingPrepared();
   }
   function begin(route){
     state.generation++;
@@ -434,6 +550,8 @@ export function createJunctionDetail({
     state.target=null;state.currentKey=null;
     state.forced=null;state.dismissed=null;
     state.display=false;state.inflight=false;
+    clearRollingPending();state.rollingCache.clear();
+    state.rollingAttempts=0;state.rollingLastStation=null;
     show(map(),false);
     update(0);
   }
@@ -442,7 +560,9 @@ export function createJunctionDetail({
     clearPending();
     state.route=null;state.target=null;
     state.display=false;state.forced=null;state.dismissed=null;
-    state.inflight=false;show(map(),false);updateButton();
+    state.inflight=false;clearRollingPending();
+    state.rollingCache.clear();state.rollingLastStation=null;
+    show(map(),false);updateButton();
   }
   function toggle(){
     if(!state.target || !entry()?.data)return;
@@ -569,6 +689,13 @@ export function createJunctionDetail({
       }))||[],
       activeGuidanceKind:activeGuidance()?.kind||null,
       cruiseGuidance:cruiseHint(),
+      rollingCoverage:{
+        requestedStations:state.rollingAttempts,
+        cachedStations:state.rollingCache.size,
+        activeStation:state.rollingLastStation,
+        readyStations:[...state.rollingCache.entries()]
+          .filter(([,value])=>!!value.data).map(([offset])=>offset)
+      },
       cruiseDiagnostics:{
         loaded:!!entry()?.data,
         rawRoadIntersections:entry()?.data?.roads?.features?.filter(f=>
