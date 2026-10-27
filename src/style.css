@@ -761,6 +761,23 @@ body[data-mode="navigation"] #idleVeil{opacity:0}
    index used to draw the reconstructed road trajectory. No maneuver arrows. */
 .lane-guidance[hidden]{display:none!important}
 .glide-lane-unavailable{color:#81919B;font-size:10px;opacity:.82}
+.glide-lane-stage{display:flex;flex-direction:column;gap:6px}
+.glide-lane-stage+.glide-lane-stage{
+  margin-top:4px;padding-top:10px;
+  border-top:1px solid rgba(200,212,220,.075);
+}
+.glide-lane-stage-label{
+  font-size:10px;color:#A2B0B7;line-height:1.2;
+  letter-spacing:.01em;
+}
+.glide-lane-stage:last-child:not(:nth-child(2)) .glide-lane-stage-label{
+  color:#C1DFD7;
+}
+.glide-lane-stage .glide-lane-rail{flex:none}
+.glide-lane-stage .glide-lane-cell{flex:0 0 39px;max-width:39px}
+@media(max-width:760px){
+  .glide-lane-stage .glide-lane-cell{flex-basis:34px;max-width:34px}
+}
 .glide-lane-rail{gap:6px;max-width:100%}
 .glide-lane-cell{
   flex:1 1 0;
