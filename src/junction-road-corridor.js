@@ -193,6 +193,8 @@ function choice(candidates,prev,prefer,turn){
       ?b.index-a.index:a.index-b.index);
     const uniqueIndices=[...new Set(allLanes.map(c=>c.index))];
     const laneOrdinal=uniqueIndices.indexOf(chosen.index);
+    const laneOffsets=uniqueIndices.map(index=>
+      allLanes.find(c=>c.index===index)?.offset);
     if(laneOrdinal<0||uniqueIndices.length>9)return null;
     const groupCenter=group.reduce((s,c)=>s+c.offset,0)/group.length;
     // When a right-side lane group is visible but prohibited by an explicit
@@ -209,7 +211,7 @@ function choice(candidates,prev,prefer,turn){
       wrongSide*4+Math.max(0,-groupCenter-9)*.6+
       continuity+leap;
     return {chosen:{...chosen,laneCount:uniqueIndices.length,
-      laneOrdinal},score};
+      laneOrdinal,laneOffsets},score};
   }).filter(Boolean).sort((a,b)=>a.score-b.score);
   if(!ranked.length)return null;
   if(ranked.length>1&&!prev&&Math.abs(ranked[1].score-ranked[0].score)<.3)
@@ -273,7 +275,7 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
   };
   const result={status:'unavailable',path:empty(),coverage:[],samples:0,
     recommendation:null,nearApproachRecommendation:null,
-    exitRecommendation:null,diagnostics,
+    exitRecommendation:null,laneFrames:[],diagnostics,
     reason:'No suitable reconstructed driving lane sections'};
   // osm2streets lane polygons do not model ordered entry/circulation/exit
   // transitions through large roundabouts reliably. Reusing the ordinary
@@ -464,7 +466,8 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
         :'Lane samples were too fragmented for a continuous trajectory';
     return result;
   }
-  const features=[],coverage=[],eligibleApproaches=[],eligibleExits=[];
+  const features=[],coverage=[],eligibleApproaches=[],eligibleExits=[],
+    laneFrames=[];
   for(const part of safePieces){
     const beginning=part[0].d/scale,ending=part.at(-1).d/scale;
     // Small orphan lane fragments are useful for OSM debugging, but they
@@ -480,6 +483,15 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
     // Sample before the maneuver, away from the intersection's turning gap.
     for(const sample of part){
       const at=sample.d/scale;
+      if(sample.hudEligible===true&&!sample.spikeCorrected&&
+        !sample.detourRepaired&&
+        Array.isArray(sample.laneOffsets)&&
+        sample.laneOffsets.length===sample.laneCount&&
+        sample.laneOffsets.every(Number.isFinite)){
+        laneFrames.push({at,road:sample.road,direction:sample.direction,
+          selected:sample.laneOrdinal,offsets:[...sample.laneOffsets],
+          laneCount:sample.laneCount});
+      }
       if(sample.hudEligible===true&&
         Number.isInteger(sample.laneCount)&&sample.laneCount>=1&&
         Number.isInteger(sample.laneOrdinal)&&
@@ -574,7 +586,7 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
   diagnostics.exitSamples=eligibleExits.length;
   return {status:'provisional',path:{type:'FeatureCollection',features},
     coverage,recommendation,nearApproachRecommendation,
-    exitRecommendation,diagnostics,
+    exitRecommendation,laneFrames,diagnostics,
     samples:features.reduce((n,f)=>n+f.geometry.coordinates.length,0),
     reason:recommendation
       ?'Lane corridor and upstream lane selection reconstructed'
