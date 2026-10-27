@@ -37,14 +37,17 @@ assert.deepEqual(output.nearApproachRecommendation?.selected,[0],
 const early=twoStageLaneGuidance(output.recommendation,null,245,{
   nearApproach:output.nearApproachRecommendation
 });
-assert.equal(early.laneCount,1);
-assert.equal(early.widensFrom,null);
+assert.equal(early,null,
+  'Do not present one pointless square before a useful added lane appears');
 const near=twoStageLaneGuidance(output.recommendation,null,131,{
-  nearApproach:output.nearApproachRecommendation
+  nearApproach:output.nearApproachRecommendation,
+  selectedTurnSide:'left'
 });
 assert.equal(near.laneCount,2,
   'Final approach HUD must show both mapped lanes once near junction');
 assert.equal(near.widensFrom,1);
+assert.deepEqual(near.addedLaneIndices,[0],
+  'New left-turn lane must carry the plus on the left');
 assert.deepEqual(near.selected,[0]);
 assert.equal(near.exit,null);
 console.log('Glide late widening lane-count and staged HUD tests passed.');
