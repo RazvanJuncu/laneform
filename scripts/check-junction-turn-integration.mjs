@@ -34,6 +34,12 @@ assert.ok(output.diagnostics.turnRadiusMeters<=9.1,
   'The displayed turn radius should not produce a huge sweeping arc');
 assert.equal(output.status,'provisional');
 assert.ok(output.path.features.length>0);
+assert.equal(output.recommendation?.road,10,
+  'First HUD row must use the same real approach-lane road as the trajectory');
+assert.equal(output.exitRecommendation?.road,11,
+  'Second HUD row must be derived from the actual rendered exit arm');
+assert.deepEqual(output.exitRecommendation?.selected,[0],
+  'Never copy the incoming ordinal instead of examining the exit lane');
 const segment=output.path.features.find(f=>
   f.geometry.coordinates.some(p=>p[0]<gps(65,0)[0])&&
   f.geometry.coordinates.some(p=>p[1]>gps(85,26)[1]));
