@@ -120,10 +120,11 @@ function selectedTurn(instruction,lookahead,d){
 function laneSide(instruction,lookahead,d){
   const current=sideOf(expectedLaneTurn(instruction));
   const at=instruction?.routeOffsetInMeters;
-  // Keep the entry/exit lane of the maneuver stable *through* the junction.
-  // A subsequent opposite turn must not teleport us sideways inside it.
-  if(current&&Number.isFinite(at)&&d>=at-130&&d<=at+45)
-    return current;
+  // Stay on the selected EXIT side for the full local mapped corridor.
+  // The previous 45m cutoff made left-turn routes suddenly jump to the
+  // rightmost (or central) lane mid-block when the preference expired.
+  // A separate explicit lane-change planner is required to switch sides.
+  if(current&&Number.isFinite(at)&&d>=at-130)return current;
   for(const next of lookahead||[]){
     const gap=next?.offset-d,upcoming=sideOf(expectedLaneTurn(next?.instruction));
     if(Number.isFinite(gap)&&gap>0&&gap<=350&&upcoming)return upcoming;
@@ -173,9 +174,15 @@ function choice(candidates,prev,prefer,turn){
     legal.sort((a,b)=>a.offset-b.offset); // driver's right -> left
     const byIndex=[...legal].sort((a,b)=>a.direction==='Backward'
       ?b.index-a.index:a.index-b.index);
-    const chosen=prefer==='left'?byIndex[0]
+    // Preserve the actual mapped lane while traveling along this road.
+    // Never replace it with a middle/right lane merely because a maneuver
+    // preference is no longer active at some arbitrary distance.
+    const same=prev && prev.road===group[0].road &&
+      prev.direction===group[0].direction
+      ?legal.find(c=>c.index===prev.index):null;
+    const chosen=same||(prefer==='left'?byIndex[0]
       :prefer==='right'?byIndex[byIndex.length-1]
-      :legal[0];
+      :legal[0]);
     // Record the FULL directional lane group (including noneligible lanes),
     // not just lanes compatible with this turn. These are the same lane
     // coordinates used in the visible trajectory, not TomTom arrow data.
@@ -296,7 +303,11 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
     return [{feature,edges,road,index,direction,
       // A geometry-only inference may be shown on the map, but must never
       // generate a lane-count HUD claim without matching source metadata.
-      hudEligible:!!explicitDirection&&knownRoad&&indexed,
+      // The source may omit direction while still providing a usable road ID
+      // and lane ordinal. For this right-hand-traffic prototype, the Inferred
+      // direction is restricted to the right-hand side in choice(), and all
+      // resulting HUD squares stay explicitly labeled 'inferred'.
+      hudEligible:knownRoad&&indexed,
       turns:Array.isArray(p.allowed_turns)
         ?p.allowed_turns.map(t=>String(t).toLowerCase()):[]
     }];
@@ -413,7 +424,7 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
         Number.isInteger(sample.laneCount)&&sample.laneCount>=1&&
         Number.isInteger(sample.laneOrdinal)&&
         sample.laneOrdinal>=0&&sample.laneOrdinal<sample.laneCount &&
-        at>=offset-115&&at<=offset-12){
+        at>=offset-165&&at<=offset-8){
         eligibleApproaches.push({...sample,at});
       }
     }
