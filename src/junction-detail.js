@@ -187,31 +187,39 @@ export function createJunctionDetail({
   const map=()=>mapGetter?.();
   const button=()=>buttonGetter?.();
   const entry=()=>state.target?state.cache.get(junctionCacheKey(state.target.position)):null;
+  function cachedThroughCrossings(){
+    const e=entry();
+    return [...(e?.throughGuidance||[]),
+      ...[...state.rollingCache.values()].flatMap(area=>
+        area.throughGuidance||[])].filter(t=>Number.isFinite(t?.offset))
+      .sort((a,b)=>a.offset-b.offset);
+  }
   function activeGuidance(){
     const e=entry(),target=state.target;
-    if(!target)return null;
-    // Favor an upcoming significant STRAIGHT-through crossing in the same
-    // cached OSM area. Both the map and mini HUD must switch together.
-    const straight=(e?.throughGuidance||[]).find(t=>
+    // Cruise's rolling scanner may identify important crossings even
+    // where TomTom has no turn and therefore no routed junction target.
+    const straight=cachedThroughCrossings().find(t=>
       t.corridor?.status==='provisional'&&
       !!twoStageLaneGuidance(
-        t.corridor.recommendation,
+        t.corridor.recommendation||
+          stableMappedLaneGroup(t.corridor.laneFrames,t.offset,'through'),
         t.corridor.exitRecommendation,t.offset-state.progress,{
           nearApproach:t.corridor.nearApproachRecommendation
         })&&
       t.offset-state.progress>=-15&&t.offset-state.progress<=200&&
-      t.offset<target.offset-45);
-    return straight
-      ?{kind:'through',offset:straight.offset,corridor:straight.corridor}
-      :{kind:'maneuver',offset:target.offset,corridor:e?.corridor};
+      (!target||t.offset<target.offset-45));
+    if(straight)return {
+      kind:'through',offset:straight.offset,corridor:straight.corridor
+    };
+    return target?{
+      kind:'maneuver',offset:target.offset,corridor:e?.corridor
+    }:null;
   }
   function junctionPhase(){
     if(!state.route)return false;
-    const crossing=(entry()?.throughGuidance||[])
-      .filter(t=>Number.isFinite(t.offset)&&
-        t.offset-state.progress>=-35&&
-        t.offset-state.progress<=200)
-      .sort((a,b)=>a.offset-b.offset)[0];
+    const crossing=cachedThroughCrossings()
+      .find(t=>t.offset-state.progress>=-35&&
+        t.offset-state.progress<=200);
     return isJunctionPhase({
       targetOffset:state.target?.offset,
       throughOffset:crossing?.offset??null,
