@@ -159,6 +159,37 @@ button:disabled{opacity:.52;cursor:not-allowed}
 .maneuver-content strong{font-size:35px;letter-spacing:-.05em;font-weight:600;font-variant-numeric:tabular-nums}
 .maneuver-content p{font-size:16px;font-weight:450;color:#C3CCD1;line-height:1.4;margin:6px 0 0}
 .lane-guidance{border-top:1px solid var(--hairline);margin-top:16px;padding-top:16px}
+/* Cruise: persistent but secondary to imminent maneuver instructions.
+   Ovals represent directional lanes, not a physical lane-position sensor. */
+.cruise-guidance{
+  display:flex;align-items:center;flex-wrap:wrap;gap:7px;
+  border-top:1px solid rgba(155,177,184,.10);
+  padding-top:10px;margin-top:12px;min-height:20px;
+}
+.cruise-title{
+  font-size:9px;font-weight:650;letter-spacing:.11em;
+  text-transform:uppercase;color:#A1B4BD;
+}
+.cruise-status{
+  font-size:10px;color:#B6D0CB;line-height:1.35;
+  font-variant-numeric:tabular-nums;
+}
+.cruise-status.cruise-unverified{color:#7C8B93}
+.cruise-rail{display:flex;align-items:center;gap:4px;margin-left:auto}
+.cruise-pill{
+  display:block;width:22px;height:8px;border-radius:999px;
+  background:#2B373F;border:1px solid rgba(180,202,211,.12);
+  opacity:.86;
+}
+.cruise-pill.recommended{
+  background:#B9EADD;border-color:#DAFAF1;
+  box-shadow:0 0 7px rgba(122,220,199,.12);opacity:1;
+}
+.cruise-pill.turn-only{background:#1B252D;opacity:.56}
+@media(max-width:760px){
+  .cruise-guidance{gap:6px}
+  .cruise-pill{width:19px;height:7px}
+}
 .nav-bar{
   bottom:22px;left:50%;transform:translateX(-50%);
   width:min(570px,calc(100vw - 32px));padding:16px 19px 12px;
