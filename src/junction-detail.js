@@ -8,7 +8,7 @@ import {smallAreaOsmUrl,MAX_OSM_BYTES,validateOsmXML,
 import {partitionJunctionGeometry} from './junction-focus.js';
 import {simplifiedJunctionGeometry} from './junction-simplified-map.js';
 import {twoStageLaneGuidance} from './lane-hud-model.js';
-import {cruiseFromMappedLanes} from './lane-cruise.js';
+import {cruiseFromMappedLanes,cruiseFromRouteAlignment} from './lane-cruise.js';
 import {sampleImportantThroughJunctions}
   from './junction-straight-sampling.js';
 import {candidateApproachLanePaths,expectedLaneTurn} from './lane-path-candidates.js';
@@ -214,12 +214,21 @@ export function createJunctionDetail({
     })).filter(t=>/left|right/.test(t.turn||'')&&
       t.offset>state.progress);
     const nearest=upcoming[0];
-    return cruiseFromMappedLanes({
+    const explicit=cruiseFromMappedLanes({
       laneFeatures:e.data.lanes?.features||[],
       throughGuidance:through,progress:state.progress,
       nextTurnOffset:nearest?.offset??null,
       nextTurnDirection:/left/.test(nearest?.turn||'')?'left':
         /right/.test(nearest?.turn||'')?'right':null
+    });
+    if(explicit)return explicit;
+    // Fallback only when our already-rendered approach corridor has a
+    // stable mapped lane ordinal. Never label it a through-safe lane.
+    return cruiseFromRouteAlignment({
+      corridor:e.corridor,
+      distanceToManeuver:target.offset-state.progress,
+      turnDirection:/left/.test(expectedLaneTurn(instruction)||'')?'left':
+        /right/.test(expectedLaneTurn(instruction)||'')?'right':null
     });
   }
   function usableTrajectory(){
@@ -560,6 +569,20 @@ export function createJunctionDetail({
       }))||[],
       activeGuidanceKind:activeGuidance()?.kind||null,
       cruiseGuidance:cruiseHint(),
+      cruiseDiagnostics:{
+        loaded:!!entry()?.data,
+        rawRoadIntersections:entry()?.data?.roads?.features?.filter(f=>
+          String(f?.properties?.type||'').toLowerCase()==='intersection').length||0,
+        throughCandidates:entry()?.throughGuidance?.length||0,
+        withThroughCorridor:entry()?.throughGuidance?.filter(t=>
+          t.corridor?.status==='provisional'&&
+          t.corridor?.recommendation).length||0,
+        explicitTurnTagPolygons:entry()?.data?.lanes?.features?.filter(f=>
+          Array.isArray(f?.properties?.allowed_turns)&&
+          f.properties.allowed_turns.length>0).length||0,
+        activeMode:cruiseHint()?.mode||'monitoring',
+        approachSamples:entry()?.corridor?.diagnostics?.approachSamples||0
+      },
       activeGuidanceOffsetMeters:activeGuidance()?.offset??null,
       plannedLaneSelection:entry()?.planner?.selected||null,
       nextManeuverLookahead:entry()?.planner?.lookahead||null,
