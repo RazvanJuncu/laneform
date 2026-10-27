@@ -5,6 +5,7 @@
 import {candidateApproachLanePaths,candidateExitLanePaths,expectedLaneTurn}
   from './lane-path-candidates.js';
 import {hasRoadLevelMovement} from './lane-continuity.js';
+import {routeProfile} from './osm-lane-geometry.js';
 
 const DEG=Math.PI/180;
 const empty=()=>({type:'FeatureCollection',features:[]});
@@ -60,8 +61,7 @@ function matchGroups(approaches,exits,roads){
   if(!pairs.length)return null;
   // When two similarly plausible road combinations exist without road-level
   // connectivity, an aerial-looking line would be misleading.
-  if(pairs.length>1 && !pairs[0].connected &&
-      pairs[1].score-pairs[0].score<9)return null;
+  if(pairs.length>1 && pairs[1].score-pairs[0].score<9)return null;
   return pairs[0];
 }
 function nextTurnPreference(next,offset){
@@ -83,6 +83,16 @@ function selectOrdinal(count,side){
   if(side==='right')return count-1;
   // In right-hand traffic, keep right when no upcoming maneuver favors another lane.
   return count-1;
+}
+function routeDistance(p,routePoints){
+  let best=Infinity;
+  for(let i=1;i<routePoints.length;i++){
+    const a=routePoints[i-1],b=routePoints[i];
+    const v=xy(a,b),w=xy(a,p),d=v[0]*v[0]+v[1]*v[1];
+    const t=d?Math.max(0,Math.min(1,(v[0]*w[0]+v[1]*w[1])/d)):0;
+    best=Math.min(best,Math.hypot(w[0]-t*v[0],w[1]-t*v[1]));
+  }
+  return best;
 }
 function bezierBetween(a,b){
   const start=a.at(-1),end=b[0];
@@ -140,6 +150,11 @@ export function planJunctionTrajectory({route,instruction,reconstructed=[],roads
   const begin=incoming.geometry.coordinates,end=outgoing.geometry.coordinates;
   const bridge=bezierBetween(begin,end);
   if(!bridge)return {...fallback,approaches,exits};
+  // A smooth curve is not sufficient: it must follow the selected provider
+  // road corridor, rather than cutting through unrelated junction arms.
+  const routePoints=routeProfile(route).points;
+  if(routePoints.length<2||bridge.some(p=>routeDistance(p,routePoints)>23))
+    return {...fallback,approaches,exits};
   const allowed=incoming.properties.allowed_turns||[];
   const explicit=allowed.length>0;
   const coords=[...begin,...bridge,...end].filter(point);
