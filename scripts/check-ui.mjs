@@ -81,7 +81,8 @@ assert.ok(js.includes('revealPreviewFromSearch(searchRect)'),
 assert.ok(js.includes("getInstructionLanes") &&
   js.includes("extractRouteLaneGuidance(route, getInstructionLanes)"),
   'Preserve route provider lane records for coverage diagnostics');
-assert.ok(js.includes("renderLaneAssistance(junctionDetail?.suggestedLanes())") &&
+assert.ok(js.includes("renderLaneAssistance(junctionDetail?.suggestedLanes(),") &&
+  js.includes("junctionDetail?.laneState()") &&
   js.includes("onGuidanceChange:()=>") &&
   !js.includes("renderLaneAssistance(laneData)"),
   'The mini lane HUD must use exactly the lane selection painted by Junction Detail');
