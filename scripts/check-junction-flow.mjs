@@ -74,15 +74,17 @@ assert.ok(view.includes("state.pendingTimer=setTimeout") &&
   'The next junction should be queued once if the source is temporarily busy');
 assert.ok(pkg.scripts.build.includes('smoke-osm2streets.mjs'));
 assert.ok(view.includes('partitionJunctionGeometry(cached.data,state.route,next.offset)') &&
-  view.includes('assign(m,e.data,e.selection,e.candidates,e.ordinal)'),
+  view.includes('assign(m,e.data,e.selection,e.candidates,e.ordinal,e.planner,e.corridor)'),
   'Junction geometry must be partitioned around the provider route before drawing');
 assert.ok(view.includes("const FOCUS_SOURCE='glide-junction-focus'") &&
   view.includes("'fill-opacity':.075") &&
   view.includes("'fill-opacity':.205"),
   'Context arms should be subdued relative to route-adjacent lane shapes');
 assert.ok(main.includes('junctionFocus?2.6:3.4') &&
-  main.includes('do NOT snap it to an inferred lane'),
-  'Detailed view should keep a narrow road-level path without invented lane snapping');
+  main.includes('routeOutsideLaneCoverage(') &&
+  view.includes('buildLaneCorridor(') &&
+  view.includes("corridor?.status==='provisional'?corridor.path:EMPTY"),
+  'Detailed view must draw reconstructed lane corridors and clip only the covered centerline');
 assert.ok(view.includes('net.toGeojsonPlain()') &&
   view.includes('buildJunctionOrdinalCandidates('),
   'Real osm2streets road-level connections must feed provisional lane pairing');
