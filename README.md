@@ -92,6 +92,26 @@ To inspect why a junction is still road-level, open the browser console and run
 and `corridorCoverage`. Synthetic geometry tests run through
 `scripts/check-lane-corridor.mjs`.
 
+### Glide lane quick-check HUD
+
+The lane strip in the top-left maneuver console is **not TomTom's turn-arrow
+strip anymore**. When an OSM junction reconstruction yields a valid
+lane-centered trajectory, the same stored corridor approach sample supplies
+its directional lane count and selected lane ordinal to the HUD. Empty squares
+show other lanes; the lane used by the map trajectory is lit. The caption
+identifies Glide's suggestion as *inferred* rather than verified. Updates
+are triggered when OSM geometry loads as well as during simulation progress.
+
+There is deliberately no TomTom fallback in this HUD: while the junction
+geometry is loading or fails to establish a suitable approach lane, the
+squares stay hidden rather than offer a conflicting recommendation. TomTom
+lane records remain available for diagnostic coverage and route planning.
+Only locally reconstructed approaches produce squares; this is not validated
+lane guidance for actual driving. The inspected lane count excludes any
+opposing-direction lanes where the reconstruction distinguishes directions.
+The lane recommendation is derived from a sample on the exact map trajectory,
+rather than inferred independently by the UI.
+
 It does **not** detect the user's actual lane, confirm all OSM restrictions,
 handle every junction (especially ones TomTom gives no instruction for), or
 guarantee that changing lanes before the next turn is safely achievable. Do not
