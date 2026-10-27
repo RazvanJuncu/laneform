@@ -48,6 +48,6 @@ assert.deepEqual(stableMappedLaneGroup(frames,240,'right').selected,[2]);
 assert.equal(stableMappedLaneGroup([frames[0]],240,'left'),null,
   'No lane count claimed from one isolated polygon sample');
 assert.equal(stableMappedLaneGroup(frames.map(f=>({
-  ...f,offsets:[-5,f.at%2===0?10:-1.5,2.1]
+  ...f,offsets:[-5,-1.5+(f.at-185)*.5,2.1]
 })),240,'left'),null,'Reject conflicting lane boundaries');
 console.log('Glide junction-only lane HUD and turn-side defaults passed.');
