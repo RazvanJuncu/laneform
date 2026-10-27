@@ -450,10 +450,12 @@ function drawRoutes() {
     // The traveled section is a matte graphite line. No halo, shadow,
     // platinum core or extra trail; only the road ahead is illuminated.
     const junctionFocus=junctionDetail?.active()===true;
-    const laneTrajectory=junctionFocus?junctionDetail?.trajectory():null;
+    // Lane-level route rendering must not depend on whether the user has
+    // zoomed into Junction Detail. It should work on the ordinary map too.
+    const laneTrajectory=junctionDetail?.trajectory()||null;
     const laneCoverage=laneTrajectory?.coverage||[];
     const realLength=feature.properties?.summary?.lengthInMeters;
-    lastLanePaint.providerRoadClipped=junctionFocus&&laneCoverage.length>0;
+    lastLanePaint.providerRoadClipped=laneCoverage.length>0;
     lastLanePaint.localCoverageSections=laneCoverage.length;
     if(traveled.length>=2){
       const past=laneCoverage.length
@@ -466,7 +468,7 @@ function drawRoutes() {
       // When a mapped lane path is available, the underlying road-center
       // trace must not compete with the lane-level trajectory in detail view.
       // If lane geometry is ambiguous, retain ordinary route guidance.
-      if(junctionFocus && laneCoverage.length){
+      if(laneCoverage.length){
         // The reconstructed lane line is visible only where we have geometry.
         // Keep the original route beyond that local window, not underneath it.
         const outside=routeOutsideLaneCoverage(
