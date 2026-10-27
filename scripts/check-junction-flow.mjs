@@ -74,7 +74,7 @@ assert.ok(view.includes("state.pendingTimer=setTimeout") &&
   'The next junction should be queued once if the source is temporarily busy');
 assert.ok(pkg.scripts.build.includes('smoke-osm2streets.mjs'));
 assert.ok(view.includes('partitionJunctionGeometry(cached.data,state.route,next.offset)') &&
-  view.includes('assign(m,e.data,e.selection,e.candidates)'),
+  view.includes('assign(m,e.data,e.selection,e.candidates,e.ordinal)'),
   'Junction geometry must be partitioned around the provider route before drawing');
 assert.ok(view.includes("const FOCUS_SOURCE='glide-junction-focus'") &&
   view.includes("'fill-opacity':.075") &&
