@@ -1014,7 +1014,9 @@ function renderLaneAssistance(laneData,laneState=null){
       note.className='lane-source glide-lane-unavailable';
       note.textContent=laneState.status==='loading'
         ?'Glide · reconstructing lanes…'
-        :'Glide · road-level only';
+        :laneState.status==='trajectory-only'
+          ?'Glide · inferred path · lanes uncertain'
+          :'Glide · road-level only';
       note.title=laneState.description||'No lane-level path established';
       panel.append(note);
       panel.hidden=false;
