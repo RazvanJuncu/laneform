@@ -371,6 +371,7 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
       sampled.push({d,point:match.point,road:match.road,
         direction:match.direction,index:match.index,
         laneOrdinal:match.laneOrdinal,laneCount:match.laneCount,
+        laneOffsets:match.laneOffsets,
         hudEligible:match.hudEligible});
       prev=match;
       diagnostics.matchedSamples++;
