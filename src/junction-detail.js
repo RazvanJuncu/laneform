@@ -8,6 +8,8 @@ import {smallAreaOsmUrl,MAX_OSM_BYTES,validateOsmXML,
 import {partitionJunctionGeometry} from './junction-focus.js';
 import {simplifiedJunctionGeometry} from './junction-simplified-map.js';
 import {twoStageLaneGuidance} from './lane-hud-model.js';
+import {sampleImportantThroughJunctions}
+  from './junction-straight-sampling.js';
 import {candidateApproachLanePaths} from './lane-path-candidates.js';
 import {buildJunctionOrdinalCandidates} from './junction-lane-bridge.js';
 import {planJunctionTrajectory} from './junction-driver-planner.js';
@@ -177,12 +179,26 @@ export function createJunctionDetail({
   const map=()=>mapGetter?.();
   const button=()=>buttonGetter?.();
   const entry=()=>state.target?state.cache.get(junctionCacheKey(state.target.position)):null;
+  function activeGuidance(){
+    const e=entry(),target=state.target;
+    if(!target)return null;
+    // Favor an upcoming significant STRAIGHT-through crossing in the same
+    // cached OSM area. Both the map and mini HUD must switch together.
+    const straight=(e?.throughGuidance||[]).find(t=>
+      t.corridor?.status==='provisional'&&
+      !!t.corridor.recommendation &&
+      t.offset-state.progress>=-15&&t.offset-state.progress<=200&&
+      t.offset<target.offset-45);
+    return straight
+      ?{kind:'through',offset:straight.offset,corridor:straight.corridor}
+      :{kind:'maneuver',offset:target.offset,corridor:e?.corridor};
+  }
   function usableTrajectory(){
     if(!state.route||!state.target)return null;
     const remaining=state.target.offset-state.progress;
     if(!Number.isFinite(remaining)||remaining>700||remaining< -35)
       return null;
-    const corridor=entry()?.corridor;
+    const corridor=activeGuidance()?.corridor;
     if(corridor?.status!=='provisional')return null;
     const features=corridor.path?.features||[];
     if(!features.length||features.length!==corridor.coverage?.length)
@@ -221,6 +237,24 @@ export function createJunctionDetail({
       route:state.route,offset:next.offset,instruction,
       lanes:cached.data.lanes.features,next:following
     });
+    // Sample important 3+ arm OSM intersections where the route stays
+    // straight, even if TomTom issued no maneuver instruction there.
+    // Restricted to the OSM area already fetched for this junction.
+    const exclusions=state.targets.map(t=>t.offset);
+    cached.throughGuidance=sampleImportantThroughJunctions({
+      route:state.route,
+      roads:cached.data.roads?.features||[],
+      centerOffset:next.offset,excludeOffsets:exclusions
+    }).slice(0,2).map(straight=>({
+      ...straight,
+      corridor:buildLaneCorridor({
+        route:state.route,offset:straight.offset,
+        instruction:{maneuver:'STRAIGHT',
+          routeOffsetInMeters:straight.offset},
+        lanes:cached.data.lanes.features,
+        next:[{offset:next.offset,instruction},...following]
+      })
+    }));
   }
   function updateButton(){
     const b=button();
@@ -424,28 +458,31 @@ export function createJunctionDetail({
       if(!e?.data)return {status:e?.status==='unavailable'?'unavailable':'loading',
         description:e?.status==='unavailable'
           ?'OSM lane geometry unavailable':'Preparing reconstructed lanes'};
-      if(e.corridor?.recommendation)return null;
+      const corridor=activeGuidance()?.corridor;
+      if(corridor?.recommendation)return null;
       // A map may already have an inferred lane trajectory without knowing
       // the number/order of approach lanes. Do not incorrectly call that
       // a road-level (TomTom-only) route in the HUD.
-      if(e.corridor?.status==='provisional')return {
+      if(corridor?.status==='provisional')return {
         status:'trajectory-only',
-        description:e.corridor.reason||
+        description:corridor.reason||
           'Mapped trajectory available, approach lane count unavailable'
       };
       return {
         status:'road-level',
-        description:e.corridor?.reason||
+        description:corridor?.reason||
           'No reliable local lane trajectory for this junction'
       };
     },
     suggestedLanes:()=>{
-      const e=entry()?.corridor;
-      const ahead=state.target?.offset-state.progress;
-      // Both rows come directly from the approach/exit samples of the SAME
-      // rendered lane corridor, with the exit row revealed closer to junction.
-      return twoStageLaneGuidance(
-        e?.recommendation,e?.exitRecommendation,ahead);
+      const g=activeGuidance();
+      const ahead=g?.offset-state.progress;
+      // Even a straight-through OSM crossing uses the exact lane corridor
+      // drawn on the map; nothing independent is invented for the HUD.
+      const value=twoStageLaneGuidance(
+        g?.corridor?.recommendation,
+        g?.corridor?.exitRecommendation,ahead);
+      return value?{...value,kind:g.kind}:null;
     },
     info:()=>({
       targetCount:state.targets.length,
@@ -467,6 +504,12 @@ export function createJunctionDetail({
       corridorCoverage:entry()?.corridor?.coverage||[],
       hudLaneRecommendation:entry()?.corridor?.recommendation||null,
       hudExitRecommendation:entry()?.corridor?.exitRecommendation||null,
+      osmThroughJunctions:entry()?.throughGuidance?.map(t=>({
+        offset:t.offset,arms:t.arms,
+        corridorStatus:t.corridor?.status||'unavailable'
+      }))||[],
+      activeGuidanceKind:activeGuidance()?.kind||null,
+      activeGuidanceOffsetMeters:activeGuidance()?.offset??null,
       plannedLaneSelection:entry()?.planner?.selected||null,
       nextManeuverLookahead:entry()?.planner?.lookahead||null,
       targetOffsetMeters:state.target?.offset??null,
