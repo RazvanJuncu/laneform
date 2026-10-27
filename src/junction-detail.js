@@ -196,7 +196,10 @@ export function createJunctionDetail({
     b.hidden=!state.route || !state.target || d>700 || d < -35 ||
       !e?.data;
     if(!b.hidden){
-      b.textContent=state.display?'Return to map':'Junction detail';
+      b.textContent=state.display
+        ? e?.planner?.status==='provisional'
+          ? 'Return to map · inferred path' : 'Return to map'
+        : 'Junction detail';
       b.setAttribute('aria-pressed',String(state.display));
       const count=e?.candidates?.features?.length||0;
       const pairs=e?.ordinal?.pairs?.length||0;
