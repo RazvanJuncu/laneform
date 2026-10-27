@@ -166,6 +166,7 @@ button:disabled{opacity:.52;cursor:not-allowed}
   border-top:1px solid rgba(155,177,184,.10);
   padding-top:10px;margin-top:12px;min-height:20px;
 }
+.cruise-guidance[hidden]{display:none}
 .cruise-title{
   font-size:9px;font-weight:650;letter-spacing:.11em;
   text-transform:uppercase;color:#A1B4BD;
@@ -207,6 +208,11 @@ button:disabled{opacity:.52;cursor:not-allowed}
 .simulation-details summary{cursor:pointer;min-height:29px;padding-top:7px}
 .simulation-details input{width:100%;accent-color:#BFC9D0;margin:13px 0}
 .simulation-details p{margin:0 0 5px;font-size:10px;line-height:1.5}
+.sim-speed-caption{display:flex;align-items:center;justify-content:space-between;
+  gap:12px;margin-top:8px;color:#C4D2D7;font-size:11px}
+.sim-speed-caption output{color:#C4E9DF;font-size:10px;font-variant-numeric:tabular-nums}
+.sim-scrub-label{display:block;margin-top:8px;color:#9CADB6;font-size:10px}
+.simulation-details input[type="range"]{margin:9px 0 13px}
 .gliding-marker{width:22px;height:25px;filter:drop-shadow(0 1px 4px #000b)}
 .gliding-marker:before{content:"";display:block;width:0;height:0;
   border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:23px solid #E7EAED}
