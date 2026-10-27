@@ -100,4 +100,22 @@ assert.equal(buildLaneCorridor({
   route,offset:profile.length/2,lanes:[]}).recommendation,null,
   'Missing reconstructed lanes must not produce highlighted squares');
 
+
+// Real osm2streets road identifiers may be opaque strings, and an exporter
+// may serialize lane indices as strings. Their geometry is still actionable.
+const opaqueRoads=twoForward.map((f,i)=>({
+  ...f,properties:{...f.properties,
+    road:'road-'+f.properties.road,index:String(f.properties.index)}
+}));
+const opaqueResult=buildLaneCorridor({
+  route,offset:profile.length/2,lanes:opaqueRoads,radius:100
+});
+assert.equal(opaqueResult.status,'provisional',
+  'String road identifiers must not eliminate valid driving lane geometry');
+assert.equal(opaqueResult.recommendation?.laneCount,2);
+assert.deepEqual(opaqueResult.recommendation?.selected,[1]);
+assert.ok(opaqueResult.diagnostics.crossSections>0,
+  'Real lane cross sections must be sampled before route rendering');
+assert.ok(opaqueResult.diagnostics.schemaSamples.length>0);
+
 console.log('Glide geometry-first lane-corridor regression tests passed.');
