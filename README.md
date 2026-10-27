@@ -155,6 +155,43 @@ directionality) is needed before enabling roundabout lane suggestions.
 This protects against false guidance but does not fix missing OSM geometry.
 The existing corridor tests cover the roundabout fallback and orphan fragments.
 
+### Cruise: quiet ongoing lane awareness
+
+The compact **Cruise** strip lives below the imminent maneuver guidance in
+simulation and stays visible during route playback, even when no defensible
+lane recommendation is known. In that case it reads
+`Monitoring · lanes unverified`, with no invented lane count or "all clear"
+claim.
+
+Cruise uses existing reconstructed OSM lane polygons and their **explicit**
+`allowed_turns` markings. For a mapped straight-through junction ahead
+(within a 360m horizon), if the same mapped directional road contains both
+an explicitly through-capable lane and an explicitly turn-only lane,
+the strip shows narrow oval lane indicators and highlights one through
+lane. It considers the next routed maneuver after that junction when picking
+among multiple through-capable lanes. If the road ID/direction/index grouping
+is incomplete, conflicting, or all lanes lack reliable turn markings, no
+lane choice is made. Lane counts are not inferred from GPS and Cruise does
+not know the driver's occupied lane.
+
+The OSM straight-through detector looks a little further back (up to 300m)
+within the **already cached** next-junction OSM region, and includes a
+provider STRAIGHT maneuver as a potential candidate. It does not introduce
+TomTom requests or guarantee full-route/worldwide intersection coverage.
+Regular straight-through intersections do not appear as big
+Approach/After-junction squares; Cruise reserves recommendations for
+actual mapped turn-only conflicts. Files:
+`src/lane-cruise.js`, `scripts/check-lane-cruise.mjs` and
+`scripts/check-lane-cruise-ui.mjs`.
+
+A final sanity pass also rejects sharp mapped lane-route kinks when the chosen
+provider segment is locally straight, leaving provider road-level guidance
+visible through the uncertain part. This reduces the misleading sideways
+green trajectory caused by some clipped OSM intersection polygons.
+See `src/lane-straight-sanity.js` and
+`scripts/check-lane-straight-sanity.mjs`. All lane hints remain provisional
+and are **not** independently validated against road signs or markings.
+
 ### Simplified Junction Detail and two-stage lane quick-check
 
 Glide now consumes the original osm2streets lane polygons, markings and road
