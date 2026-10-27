@@ -80,9 +80,10 @@ assert.ok(view.includes('partitionJunctionGeometry(cached.data,state.route,next.
   view.includes('assign(m,e.data,e.selection,e.candidates,e.ordinal,e.planner,e.corridor)'),
   'Junction geometry must be partitioned around the provider route before drawing');
 assert.ok(view.includes("const FOCUS_SOURCE='glide-junction-focus'") &&
-  view.includes("'fill-opacity':.075") &&
-  view.includes("'fill-opacity':.205"),
-  'Context arms should be subdued relative to route-adjacent lane shapes');
+  view.includes('simplifiedJunctionGeometry(data,selection)') &&
+  view.includes('map.getSource(MARKS_SOURCE).setData(EMPTY)') &&
+  view.includes("const actual=[IDS[0],IDS[1],IDS[2],IDS[3]].includes(id)?v:'none'"),
+  'Junction Detail should render simplified driving surfaces without raw OSM arrows or debug layers');
 assert.ok(main.includes('junctionFocus?2.6:3.4') &&
   main.includes('routeOutsideLaneCoverage(') &&
   main.includes('visibleLaneTrajectorySegments(') &&
@@ -93,12 +94,14 @@ assert.ok(main.includes('junctionFocus?2.6:3.4') &&
   view.includes('hasTrajectory:()=>!!usableTrajectory()') &&
   main.includes('const laneTrajectory=junctionDetail?.trajectory()||null') &&
   main.includes('if(laneCoverage.length)') &&
-  view.includes("const actual=(id===IDS[8]||id===IDS[9])?'none':v"),
+  view.includes("const actual=[IDS[0],IDS[1],IDS[2],IDS[3]].includes(id)?v:'none'"),
   'Lane trajectory must be drawn on the same topmost canvas as TomTom, with only non-covered centerline segments');
 assert.ok(view.includes('net.toGeojsonPlain()') &&
   view.includes('buildJunctionOrdinalCandidates('),
   'Real osm2streets road-level connections must feed provisional lane pairing');
 assert.ok(view.includes('const EXIT_SOURCE=') &&
-  view.includes('map.getSource(EXIT_SOURCE).setData('),
-  'Provisional exit lane segments must be rendered separately, not joined through junction');
+  view.includes('map.getSource(EXIT_SOURCE).setData(EMPTY)') &&
+  view.includes('twoStageLaneGuidance(') &&
+  view.includes('sampleImportantThroughJunctions('),
+  'Junction Detail should keep noisy candidates hidden and share route samples between map and staged lane HUD');
 console.log('Glide progressive junction prefetch, zoom and lifecycle tests passed.');
