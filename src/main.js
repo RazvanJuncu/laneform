@@ -1196,6 +1196,9 @@ function attachEvents() {
       navCamera(along(state.sim.distance),true);
     }
   });
+  // Non-sensitive geometry diagnostics for testing Junction Detail.
+  // Inspect in the browser console: glideJunctionInfo()
+  window.glideJunctionInfo=()=>junctionDetail?.info()||null;
   $('backToPlanning').addEventListener('click',()=>{
     // Keep the calculated route in memory, but hide it during a new search.
     state.routeMarkers.forEach(x=>x.getElement().style.display='none');
