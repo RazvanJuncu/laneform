@@ -372,6 +372,7 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
         direction:match.direction,index:match.index,
         laneOrdinal:match.laneOrdinal,laneCount:match.laneCount,
         laneOffsets:match.laneOffsets,
+        turns:match.turns,
         hudEligible:match.hudEligible});
       prev=match;
       diagnostics.matchedSamples++;
@@ -538,6 +539,7 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
     return {source:'glide',status:'inferred',laneCount:sample.laneCount,
       selected:[sample.laneOrdinal],laneIndex:sample.index,
       road:sample.road,direction:sample.direction,
+      turns:Array.isArray(sample.turns)?[...sample.turns]:[],
       sampleOffsetMeters:sample.at,junctionOffsetMeters:offset};
   }
   const recommendation=hudRecord(first);
