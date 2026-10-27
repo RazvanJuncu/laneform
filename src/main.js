@@ -1055,6 +1055,7 @@ function renderLaneAssistance(laneData,laneState=null){
   info.className='lane-source';
   const ahead=Number(laneData.distanceToManeuver);
   info.textContent='Suggested lanes · '+
+    (laneData.kind==='through'?'continue straight · ':'')+
     (Number.isFinite(ahead)?distance(Math.max(0,ahead))+' ahead · ':'')+
     'Glide (inferred)';
   panel.append(info,approach);
