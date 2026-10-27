@@ -18,6 +18,24 @@ assert.deepEqual(near.exit.selected,[0],
   'Use distinct mapped approach and destination lane choices');
 assert.equal(twoStageLaneGuidance(lane(3,1),lane(2,0),-40),null);
 assert.equal(twoStageLaneGuidance(lane(3,1),null,70).exit,null);
+const mappedExpansion=lane(2,0);
+const distantWidening=twoStageLaneGuidance(lane(1,0),null,230,{
+  nearApproach:mappedExpansion
+});
+assert.equal(distantWidening.laneCount,1,
+  'Avoid showing a second lane long before it physically begins');
+assert.equal(distantWidening.widensFrom,null);
+const finalWidening=twoStageLaneGuidance(lane(1,0),null,131,{
+  nearApproach:mappedExpansion
+});
+assert.equal(finalWidening.laneCount,2,
+  'Final approach uses the mapped lane count after the split');
+assert.deepEqual(finalWidening.selected,[0]);
+assert.equal(finalWidening.widensFrom,1,
+  'Mark the HUD as upcoming roadway widening');
+assert.equal(twoStageLaneGuidance(lane(1,0),null,90,{
+  nearApproach:{...mappedExpansion,selected:[3]}
+}).laneCount,1,'Reject invalid widening geometry');
 assert.equal(twoStageLaneGuidance(lane(3,1),{
   ...lane(2,0),selected:[4]
 },60).exit,null,'Do not invent incorrect exit-lane squares');
