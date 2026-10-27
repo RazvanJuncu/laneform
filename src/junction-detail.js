@@ -481,7 +481,9 @@ export function createJunctionDetail({
       // drawn on the map; nothing independent is invented for the HUD.
       const value=twoStageLaneGuidance(
         g?.corridor?.recommendation,
-        g?.corridor?.exitRecommendation,ahead);
+        g?.corridor?.exitRecommendation,ahead,{
+          nearApproach:g?.corridor?.nearApproachRecommendation
+        });
       return value?{...value,kind:g.kind}:null;
     },
     info:()=>({
@@ -503,6 +505,7 @@ export function createJunctionDetail({
       corridorSamples:entry()?.corridor?.samples||0,
       corridorCoverage:entry()?.corridor?.coverage||[],
       hudLaneRecommendation:entry()?.corridor?.recommendation||null,
+      hudNearApproach:entry()?.corridor?.nearApproachRecommendation||null,
       hudExitRecommendation:entry()?.corridor?.exitRecommendation||null,
       osmThroughJunctions:entry()?.throughGuidance?.map(t=>({
         offset:t.offset,arms:t.arms,
