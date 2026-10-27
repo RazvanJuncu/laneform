@@ -186,7 +186,11 @@ export function createJunctionDetail({
     // cached OSM area. Both the map and mini HUD must switch together.
     const straight=(e?.throughGuidance||[]).find(t=>
       t.corridor?.status==='provisional'&&
-      !!t.corridor.recommendation &&
+      !!twoStageLaneGuidance(
+        t.corridor.recommendation,
+        t.corridor.exitRecommendation,t.offset-state.progress,{
+          nearApproach:t.corridor.nearApproachRecommendation
+        })&&
       t.offset-state.progress>=-15&&t.offset-state.progress<=200&&
       t.offset<target.offset-45);
     return straight
