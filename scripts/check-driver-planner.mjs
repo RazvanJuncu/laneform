@@ -51,8 +51,8 @@ const noNext=planJunctionTrajectory({
   reconstructed:lanes,roads
 });
 assert.equal(noNext.status,'provisional');
-assert.equal(noNext.selected.approachLane,0,
-  'Without a next maneuver the chosen lane should remain stable');
+assert.equal(noNext.selected.approachLane,1,
+  'When no next maneuver demands otherwise, prefer the right lane');
 
 // A contrary mapped arrow must exclude a lane from the provisional planner.
 const marked=lanes.map((l,i)=>i===0
