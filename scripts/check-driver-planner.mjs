@@ -74,4 +74,54 @@ assert.equal(planJunctionTrajectory({
   route,instruction:{routeOffsetInMeters:firstTurn,maneuver:'ROUNDABOUT'},
   reconstructed:lanes,roads
 }).status,'unavailable','Unrecognized maneuvers must fall back');
+
+const leftShape={type:'LineString',coordinates:[
+  [26,44],[26.004,44],[26.004,44.002]
+]};
+const leftProfile=routeProfile({geometry:leftShape});
+const leftRoute={type:'Feature',geometry:leftShape,properties:{
+  summary:{lengthInMeters:leftProfile.length}
+}};
+const leftLanes=[
+  rectangle(30,0,26.00260,26.00392,44.000049,44.000078),
+  rectangle(30,1,26.00260,26.00392,44.000017,44.000046),
+  rectangle(31,0,26.003918,26.003948,44.00019,44.00130),
+  rectangle(31,1,26.003952,26.003982,44.00019,44.00130)
+];
+const inferredLeft=planJunctionTrajectory({
+  route:leftRoute,
+  instruction:{routeOffsetInMeters:leftProfile.cumulative[1],
+    maneuver:'TURN_LEFT'},
+  reconstructed:leftLanes,
+  roads:[{type:'Feature',properties:{type:'intersection',
+    movements:['30 -> 31']}}]
+});
+assert.equal(inferredLeft.status,'provisional',
+  'A geometrically clear left turn can be illustrated without mapped arrows');
+assert.equal(inferredLeft.selected.approachLane,0,
+  'An unmarked left turn begins from the leftmost suitable lane');
+assert.equal(inferredLeft.selected.exitLane,0,
+  'An unmarked left turn preserves leftmost relative exit position');
+
+// Where geometry for the SECOND junction is already in the downloaded area,
+// prioritize its actual lane arrow over the generic outer-lane heuristic.
+const nextMarked=lanes.map((lane,i)=>i===2
+  ? {...lane,properties:{...lane.properties,allowed_turns:['right']}}
+  : i===3
+    ? {...lane,properties:{...lane.properties,allowed_turns:['through']}}
+    : lane);
+const mappedNext=planJunctionTrajectory({
+  route,instruction:{routeOffsetInMeters:firstTurn,maneuver:'STRAIGHT'},
+  reconstructed:nextMarked,roads,
+  next:[{offset:firstTurn+45,instruction:{maneuver:'STRAIGHT'}},
+    {offset:secondTurn,instruction:{
+      routeOffsetInMeters:secondTurn,maneuver:'TURN_RIGHT'
+    }}]
+});
+assert.equal(mappedNext.status,'provisional');
+assert.equal(mappedNext.selected.exitLane,0,
+  'Use mapped lane directions at the next junction when nearby');
+assert.equal(mappedNext.selected.approachLane,0,
+  'Do not cross an intersection diagonally to reach the next turn lane');
+
 console.log('Glide driver-lookahead lane trajectory checks passed.');
