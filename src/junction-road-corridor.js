@@ -176,8 +176,13 @@ function distanceToRoute(p,profile,nearD){
  */
 export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
   next=[],radius=125}={}){
+  const diagnostics={
+    inputPolygons:Array.isArray(lanes)?lanes.length:0,
+    eligibleDrivingPolygons:0,crossSections:0,
+    matchedSamples:0,continuousSections:0,approachSamples:0
+  };
   const result={status:'unavailable',path:empty(),coverage:[],samples:0,
-    recommendation:null,
+    recommendation:null,diagnostics,
     reason:'No suitable reconstructed driving lane sections'};
   const profile=routeProfile(route),total=route?.properties?.summary?.lengthInMeters;
   if(profile.length<25||!Number.isFinite(total)||total<=0||
@@ -198,7 +203,13 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
         ?p.allowed_turns.map(t=>String(t).toLowerCase()):[]
     }];
   });
-  if(!driving.length)return result;
+  diagnostics.eligibleDrivingPolygons=driving.length;
+  if(!driving.length){
+    result.reason=lanes.length
+      ?'Reconstructed polygons have no usable directional driving-lane metadata'
+      :'No reconstructed lane polygons were returned';
+    return result;
+  }
   const sampled=[];
   let prev=null;
   for(let d=from;d<=until+.01;d+=SAMPLE){
@@ -216,6 +227,7 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
           direction:f.direction,turns:f.turns});
       }
     }
+    diagnostics.crossSections+=candidates.length;
     const match=choice(candidates,prev,prefer,turn);
     if(match && prev && prev.road===match.road &&
         prev.direction===match.direction&&prev.index!==match.index){
@@ -228,6 +240,7 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
         direction:match.direction,index:match.index,
         laneOrdinal:match.laneOrdinal,laneCount:match.laneCount});
       prev=match;
+      diagnostics.matchedSamples++;
     }else{
       sampled.push(null);
       // Don't keep directional group indefinitely through missing map data.
@@ -258,6 +271,15 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
     active.push(s);
   }
   close();
+  diagnostics.continuousSections=pieces.length;
+  if(!pieces.length){
+    result.reason=diagnostics.crossSections===0
+      ?'No driving-lane polygon overlaps the selected route corridor'
+      :diagnostics.matchedSamples===0
+        ?'Lane sides or turn permissions could not be established'
+        :'Lane samples were too fragmented for a continuous trajectory';
+    return result;
+  }
   const features=[],coverage=[],eligibleApproaches=[];
   for(const part of pieces){
     const beginning=part[0].d/scale,ending=part.at(-1).d/scale;
@@ -280,20 +302,38 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
       }
     }
   }
-  if(!features.length)return result;
-  // An approach sample ~55m before the junction is usually well outside its
-  // central geometry. We use THAT exact lane index for the HUD squares.
+  if(!features.length){
+    result.reason='Lane sections shorter than the 12-metre visualization limit';
+    return result;
+  }
+  diagnostics.approachSamples=eligibleApproaches.length;
+  // Choose the closest valid upstream lane sample, but don't insist on an
+  // arbitrary 55m anchor when the real OSM lane polygon is shorter.
+  // It must still lie upstream of the maneuver and be visible on the route.
   eligibleApproaches.sort((a,b)=>
     Math.abs(a.at-(offset-55))-Math.abs(b.at-(offset-55)));
-  const first=eligibleApproaches[0];
-  const recommendation=first && Math.abs(first.at-(offset-55))<=50
+  let first=eligibleApproaches[0]||null;
+  // Check neighboring samples for consistency; reject an isolated flip
+  // between lanes instead of highlighting a square which would contradict
+  // the longer trajectory.
+  if(first){
+    const peers=eligibleApproaches.filter(p=>
+      p.road===first.road&&p.direction===first.direction&&
+      Math.abs(p.at-first.at)<=16);
+    const agreeing=peers.filter(p=>
+      p.laneOrdinal===first.laneOrdinal&&p.laneCount===first.laneCount);
+    if(agreeing.length<Math.min(2,peers.length))first=null;
+  }
+  const recommendation=first
     ?{source:'glide',status:'inferred',laneCount:first.laneCount,
       selected:[first.laneOrdinal],laneIndex:first.index,
       road:first.road,direction:first.direction,
       sampleOffsetMeters:first.at,junctionOffsetMeters:offset}
     :null;
   return {status:'provisional',path:{type:'FeatureCollection',features},
-    coverage,recommendation,
+    coverage,recommendation,diagnostics,
     samples:features.reduce((n,f)=>n+f.geometry.coordinates.length,0),
-    reason:'Driving-lane cross sections and local trajectory lookahead'};
+    reason:recommendation
+      ?'Lane corridor and upstream lane selection reconstructed'
+      :'Trajectory available, but no stable upstream lane for the quick-check'};
 }
