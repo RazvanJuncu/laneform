@@ -33,7 +33,7 @@ const result=smoothMappedTurn(samples,{
 assert.equal(result.bridged,true,'Two stable lane arms should connect');
 assert.equal(result.method,'compact-corner',
   'A 90-degree urban turn should use a short-radius fillet, not a broad cubic arc');
-assert.ok(result.cornerRadiusMeters>=3.5&&result.cornerRadiusMeters<=9.1,
+assert.ok(result.cornerRadiusMeters>=3.5&&result.cornerRadiusMeters<=7.1,
   'Keep the illustrative 90-degree turn radius compact');
 assert.ok(Math.abs(result.cornerAngleDegrees-90)<2);
 assert.ok(result.gap>25);
@@ -87,4 +87,20 @@ assert.equal(safety.bridged,false,
 assert.ok(safety.samples.some(p=>p===null),
   'Suppress ambiguous junction points when a safe connector cannot be found');
 assert.equal(smoothMappedTurn(samples,{turnDistance:NaN}).bridged,false);
+
+// Regression: two plausible nonparallel lane bearings can extrapolate to a
+// corner BEHIND the exit anchor. A whole-span cubic would make a huge wrong
+// sweep through the center (seen in complex intersections). Never use it.
+const wrongAxes=samples.map(s=>s.d>=75?{
+  ...s,point:local(60+(s.d-75)*.5,
+    -20+(s.d-75)*Math.sin(Math.PI/3))
+}:s);
+const incompatible=smoothMappedTurn(wrongAxes,{
+  turnDistance:60,routeDistance:()=>0
+});
+assert.equal(incompatible.bridged,false,
+  'Do not fall back to sweeping long cubic when the real lane axes cannot meet ahead');
+assert.ok(incompatible.samples.some(s=>s===null),
+  'Leave unsupported crossing as a road-level fallback, not a fabricated lane curve');
+
 console.log('Glide mapped junction turn-smoothing and safe fallback tests passed.');
