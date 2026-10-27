@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
 const source=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
-const first=source.indexOf('function renderLaneAssistance(laneData){');
+const first=source.indexOf('function renderLaneAssistance(laneData,laneState=null){');
 const last=source.indexOf('\nfunction navCamera(',first);
 assert.ok(first>=0&&last>first,'Mini HUD renderer must exist');
 const panel={
@@ -52,4 +52,13 @@ assert.deepEqual(panel.children[1].children.map(s=>
 render({source:'glide',status:'inferred',laneCount:2,selected:[5]});
 assert.equal(panel.hidden,true,
   'Invalid or out-of-range recommended lanes must not be displayed');
+render(null,{status:'road-level',
+  description:'No suitable reconstructed driving lane sections'});
+assert.equal(panel.hidden,false,
+  'During Junction Detail the missing lane information must be explained');
+assert.match(panel.children[0].textContent,/road-level only/);
+assert.equal(panel.children.length,1,
+  'Do not render placeholder or invented recommendation squares');
+render(null,{status:'loading',description:'Preparing reconstructed lanes'});
+assert.match(panel.children[0].textContent,/reconstructing lanes/);
 console.log('Glide arrowless lane HUD and corridor selection sync tests passed.');
