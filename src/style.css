@@ -800,6 +800,15 @@ body[data-mode="navigation"] #idleVeil{opacity:0}
     0 0 13px rgba(78,217,182,.14);
   opacity:1;
 }
+.glide-lane-cell.added-lane{
+  display:grid;
+  place-items:center;
+  color:#A7DBD0;
+  font-size:22px;
+  font-weight:400;
+  line-height:1;
+}
+.glide-lane-cell.added-lane.recommended{color:#1B4541}
 @media(max-width:760px){
   .glide-lane-cell{height:auto;max-width:39px;border-radius:10px}
 }
