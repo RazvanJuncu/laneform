@@ -155,6 +155,49 @@ directionality) is needed before enabling roundabout lane suggestions.
 This protects against false guidance but does not fix missing OSM geometry.
 The existing corridor tests cover the roundabout fallback and orphan fragments.
 
+### Continuous lane sampling and route-aware bifurcations
+
+Cruise no longer waits for a TomTom turn to investigate the road ahead.
+`src/cruise-rolling-window.js` selects a **rolling 300 m route-distance
+station**. Each station fetches one compact osm2streets reconstruction
+(radius capped at 190 m) and locally cross-sections the drivable lanes
+roughly every **5 metres**. This is *sampling geometry* every few metres,
+not downloading mapping data every few metres. Requests share the current
+30-second OSM cooldown and single-flight limit with Junction Detail;
+upcoming routed junctions have priority. A bounded seven-station cache
+prevents re-downloading while continuously playing or scrubbing inside
+an already prepared area. **No new TomTom requests** are made.
+
+`src/junction-road-corridor.js` now passes all reconstructed directional
+lane-centre offsets (`laneFrames`) to Cruise, not just the single lane
+chosen for the green trajectory. `src/lane-cruise-continuity.js` looks
+for stable **3 → 2** or analogous one-lane departures on the *selected
+route*: compare a multi-lane cross-section with repeated later two-lane
+cross-sections, match the retained positions in their original lateral
+order, and only highlight a continuing lane when the match is unique.
+A mere **2 → 3** expansion is **not** enough evidence that the new lane
+is turn-only or exits. Likewise, ambiguous disappearing middle lanes
+or incomplete direction metadata do not generate a suggestion.
+
+For a **2 → 3 → 2** pattern, the early Cruise display continues showing
+the existing two lanes until the third appears, then shows three lanes
+and highlights a lane that remains on the route. The status uses
+`Lane peels away` rather than claiming a confirmed mandatory exit. A
+distinct Cruise type retains the higher-confidence explicitly OSM-tagged
+`Keep through` guidance; the old `Align for next turn` fallback is
+still available when no branch continuity can be determined.
+
+Tests: `scripts/check-lane-cruise-continuity.mjs`,
+`scripts/check-lane-cruise-corridor.mjs`, and
+`scripts/check-cruise-rolling-window.mjs`. Runtime diagnostics:
+`glideJunctionInfo().rollingCoverage`, `cruiseGuidance` and
+`cruiseDiagnostics`.
+
+Limitations: public OSM areas may be incomplete, out of date, rate-limited
+or mapped without lane geometry. This provisional prototype is intended
+for preview and simulation; its lane continuation is not independently
+verified against lane markings, traffic rules or the driver's actual lane.
+
 ### Cruise: quiet ongoing lane awareness
 
 The compact **Cruise** strip lives below the imminent maneuver guidance in
@@ -203,9 +246,10 @@ unexplained green kinks and leave the road-level route visible.
 Tests: `scripts/check-lane-return-filter.mjs` and
 `scripts/check-lane-straight-sanity.mjs`.
 
-The source-data and Cruise coverage is still limited by the small downloaded
-OSM areas around forthcoming TomTom maneuvers. A neutral Cruise status
-means this prototype has insufficient evidence, not that all lanes are safe.
+Cruise now also investigates rolling OSM windows between TomTom maneuvers,
+but coverage remains bounded by downloaded/cached areas, connectivity
+confidence and the availability of useful OSM lane geometry. A neutral
+Cruise status means insufficient evidence, not that all lanes are safe.
 For diagnostics inspect `glideJunctionInfo().cruiseDiagnostics` and
 `glideJunctionInfo().corridorDiagnostics.returningDetoursRepaired`. All lane hints remain provisional
 and are **not** independently validated against road signs or markings.
