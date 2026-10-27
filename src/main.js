@@ -1074,6 +1074,47 @@ function renderLaneAssistance(laneData,laneState=null){
   panel.hidden=false;
 }
 
+function renderCruiseGuidance(cue){
+  const panel=$('cruiseGuidance');
+  if(!panel)return;
+  panel.replaceChildren();
+  const name=document.createElement('span');
+  name.className='cruise-title';
+  name.textContent='Cruise';
+  panel.append(name);
+  if(!cue||cue.source!=='glide'||cue.kind!=='cruise'||
+    !Number.isInteger(cue.laneCount)||cue.laneCount<2||
+    cue.laneCount>9||!Array.isArray(cue.selected)){
+    // A continuous status must not fabricate lane counts or say that the
+    // road is "clear" when OSM has no explicit forward/turn-only markings.
+    const note=document.createElement('span');
+    note.className='cruise-status cruise-unverified';
+    note.textContent='Monitoring · lanes unverified';
+    panel.append(note);
+    panel.title='Cruise is monitoring cached map data. No reliable lane recommendation yet.';
+    return;
+  }
+  const note=document.createElement('span');
+  note.className='cruise-status';
+  note.textContent='Keep through · '+distance(Math.max(0,
+    cue.distanceToJunction))+' ahead';
+  const rail=document.createElement('div');
+  rail.className='cruise-rail';
+  rail.setAttribute('role','img');
+  rail.setAttribute('aria-label',
+    cue.laneCount+' mapped lanes; keep lane '+
+    (cue.selected[0]+1)+' (inferred from OSM turn markings).');
+  for(let i=0;i<cue.laneCount;i++){
+    const pill=document.createElement('span');
+    pill.className='cruise-pill'+(cue.selected.includes(i)?' recommended':
+      cue.turnOnly?.includes(i)?' turn-only':'');
+    pill.setAttribute('aria-hidden','true');
+    rail.append(pill);
+  }
+  panel.append(note,rail);
+  panel.title='OSM shows a through lane and at least one turn-only lane. '
+    +'This is a provisional map-based suggestion, not detected vehicle position.';
+}
 function navCamera(p,immediate=false){
   if(!state.sim.follow||!state.map||!p)return;
   const now=performance.now();
@@ -1119,6 +1160,7 @@ function navHud(){
   junctionDetail?.update(offset);
   renderLaneAssistance(junctionDetail?.suggestedLanes(),
     junctionDetail?.laneState());
+  renderCruiseGuidance(junctionDetail?.cruise());
 }
 function positionSim(meters,forceCamera=false){
   const sim=state.sim;
@@ -1264,6 +1306,7 @@ function attachEvents() {
       if(state.sim.active)
         renderLaneAssistance(junctionDetail?.suggestedLanes(),
           junctionDetail?.laneState());
+        renderCruiseGuidance(junctionDetail?.cruise());
     },
     onButtonAction:()=>{
       if(!state.sim.active)return;
