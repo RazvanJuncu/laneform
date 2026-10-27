@@ -108,11 +108,15 @@ the route canvas (`canvasLaneSegments>0`) from the unmodified provider route
 At a routed left/right turn, the lane corridor no longer follows individual
 osm2streets polygon matches through the junction center. Overlapping and
 truncated lane polygons created jagged paths despite valid entry/exit lanes.
-The new `src/junction-turn-connector.js` trims unstable samples near the
-maneuver, seeks stable lane samples with nearby consistent lane/road IDs
-on both sides, and connects their measured tangents with one short cubic
-Bézier. It checks forward progress, gap size, and proximity to the chosen
-TomTom road corridor. The resulting smooth path remains provisional. When
+The `src/junction-turn-connector.js` trims unstable samples near the
+maneuver and seeks stable approach/exit lane samples with compatible headings.
+For near-orthogonal urban turns, it now computes the intersection of the
+approach and exit lane axes, preserves straight portions near that intersection,
+and rounds their corner with a short radius-limited Bézier fillet (target 4.5–9 m,
+depending on the lane geometry). This avoids the unrealistic long sweeping arc
+created by connecting far-apart lane endpoints with one cubic. Oblique turns can
+retain the original gentle interpolation. Every result still checks forward
+progress, gaps and proximity to the chosen TomTom road corridor. The resulting smooth path remains provisional. When
 a convincing connection is missing, the unstable middle is suppressed rather
 than showing an invented lane jump. The rest of the road-level route remains
 visible. Real-world lane guidance is not yet verified.
@@ -120,7 +124,11 @@ visible. Real-world lane guidance is not yet verified.
 Unit and integration tests: `scripts/check-junction-turn-connector.mjs` and
 `scripts/check-junction-turn-integration.mjs`. In browser diagnostics inspect
 `glideJunctionInfo().corridorDiagnostics.turnConnector`: `smooth`,
-`suppressed-unstable-junction`, or `not-required`.
+`suppressed-unstable-junction`, or `not-required`. For smooth turns,
+`turnConnectorMethod` reports `compact-corner` or `cubic`,
+and `turnRadiusMeters` / `turnAngleDegrees` expose the fitted corner
+geometry when a compact fillet was possible. These are schematic values,
+not surveyed road-curb or physically certified vehicle turning radii.
 
 ### Junction integrity safeguards
 
