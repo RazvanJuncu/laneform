@@ -69,14 +69,28 @@ is constructed from sampled driving-lane polygons and a smooth junction connecto
 When a suitable trajectory is available, the road-centerline canvas trace is
 hidden in detail view; otherwise ordinary routing remains visible.
 
-The planner first respects available approach-lane turn directions. On unmarked
-roads, it applies leftmost-for-left, rightmost-for-right, natural lane continuity,
-and a keep-right baseline for the Bucharest/right-hand-traffic prototype. For
-straight movements it looks ahead through up to four nearby route instructions
-(within 350 metres) and can use the next intersection's mapped lane arrows from
-the **already-fetched** OSM reconstruction. Its output is geometric inference,
-not proof of connectivity; ambiguous lane groups, missing exit geometry, and
-paths that leave the routed roadway revert to route-level guidance.
+The experimental geometry-first corridor sampler
+(`src/junction-road-corridor.js`) now casts cross-sections through nearby
+osm2streets driving-lane polygons along the selected route. It works on ordinary
+straight-through junctions without a TomTom maneuver instruction and does not
+require a long, complete approach-plus-exit lane pairing. The visual trajectory
+follows the sampled lane centers; short gaps can be bridged smoothly when the
+route corridor supports it. Its result is **inferred**, not verified.
+
+Approach arrows exclude contradictory choices; unmarked turns prefer the
+leftmost driving lane for left turns and the rightmost for right turns in
+right-hand traffic. A rolling lookahead examines up to four nearby maneuvers
+within 350 metres, while an active turn keeps its lane position stable
+through the junction. Abrupt same-road lane jumps are rejected rather than
+drawing instantaneous lateral diagonals. If local lane geometry is missing
+or ambiguous, the road-level route remains visible.
+
+Only the portion of the original TomTom centerline covered by reconstructed
+lane samples is hidden. Route segments beyond the junction are preserved.
+To inspect why a junction is still road-level, open the browser console and run
+`glideJunctionInfo()`; look at `corridorStatus`, `corridorSamples`,
+and `corridorCoverage`. Synthetic geometry tests run through
+`scripts/check-lane-corridor.mjs`.
 
 It does **not** detect the user's actual lane, confirm all OSM restrictions,
 handle every junction (especially ones TomTom gives no instruction for), or
