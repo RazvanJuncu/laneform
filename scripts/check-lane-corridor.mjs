@@ -194,4 +194,27 @@ assert.ok(measuredLanes.every(p=>p[0]<26.000050),
   'The chosen leftmost lane must remain leftmost >70m after a maneuver');
 assert.deepEqual(consistent.recommendation?.selected,[0]);
 
+
+// A roundabout needs an actual circulating lane graph and cannot be inferred
+// by joining whichever polygon samples happen to be near the route line.
+const roundabout=buildLaneCorridor({
+  route:longRoute,offset:atTurn,lanes:threeForward,radius:120,
+  instruction:{maneuver:'ROUNDABOUT_RIGHT',
+    routeOffsetInMeters:atTurn}
+});
+assert.equal(roundabout.status,'unavailable',
+  'Do not draw misleading lane-level paths through unsupported roundabouts');
+assert.equal(roundabout.diagnostics.turnConnector,'unsupported-roundabout');
+assert.equal(roundabout.path.features.length,0);
+assert.equal(roundabout.recommendation,null,
+  'The mini HUD must not present a guessed roundabout circulating lane');
+const tinyFragment=buildLaneCorridor({
+  route,offset:profile.length/2,radius:100,
+  lanes:[polygon(555,0,'Forward',26.000015,26.000045,
+    44.000350,44.000510)]
+});
+assert.equal(tinyFragment.status,'unavailable',
+  'Tiny isolated lane stubs must not replace provider navigation');
+assert.equal(tinyFragment.recommendation,null);
+
 console.log('Glide geometry-first lane-corridor regression tests passed.');
