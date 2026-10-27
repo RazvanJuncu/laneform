@@ -29,6 +29,24 @@ export function twoStageLaneGuidance(
     nearApproach.laneCount>approach.laneCount&&
     distanceToManeuver<=wideningRevealMeters;
   const selected=widening?nearApproach:approach;
+  // Driver-style default for a turn when no explicitly compatible
+  // OSM turn:lanes instruction is available: leftmost for left turns,
+  // rightmost for right turns. Explicit tagging always overrides this.
+  const explicitTurns=Array.isArray(selected.turns)?
+    selected.turns:[];
+  const hasMappedDirection=selectedTurnSide&&explicitTurns.some(t=>
+    t===selectedTurnSide||t.endsWith('_'+selectedTurnSide));
+  const defaultIndex=selectedTurnSide==='left'?0:
+    selectedTurnSide==='right'?selected.laneCount-1:null;
+  const guidedApproach=defaultIndex!==null&&!hasMappedDirection
+    ?{...selected,selected:[defaultIndex],
+      selectionBasis:'driver-side-default'}:selected;
+  // The ordinary exit mapping has no explicit lane-to-lane connection;
+  // preserve a verified lane connector if one becomes available.
+  const guidedExit=validLaneSelection(exit)&&defaultIndex!==null&&
+    !exit.explicitLaneConnection
+    ?{...exit,selected:[selectedTurnSide==='left'?0:exit.laneCount-1],
+      selectionBasis:'driver-side-default'}:exit;
   // A 1->1 passage requires no lane decision. Suppress the whole HUD,
   // including boring straight-through crossings, unless a lane really
   // appears or the outgoing lane group has multiple choices.
@@ -46,8 +64,8 @@ export function twoStageLaneGuidance(
     :side==='right'
       ?Array.from({length:addedCount},(_,i)=>
         selected.laneCount-addedCount+i):[];
-  return {...selected,distanceToManeuver,
+  return {...guidedApproach,distanceToManeuver,
     widensFrom:widening?approach.laneCount:null,
     addedLaneIndices,
-    exit:shown?exit:null,exitRevealMeters:revealMeters};
+    exit:shown?guidedExit:null,exitRevealMeters:revealMeters};
 }
