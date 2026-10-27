@@ -40,6 +40,12 @@ assert.equal(panel.children[2].children[2].className,'cruise-pill');
 assert.equal(panel.children[2].children[1].textContent,'',
   'Cruise ovals never receive directional arrows');
 assert.match(panel.children[2].attrs['aria-label'],/lane 2/);
+render({source:'glide',kind:'cruise',mode:'alignment',status:'inferred',
+  laneCount:2,selected:[0],turnOnly:[],distanceToJunction:315});
+assert.match(panel.children[1].textContent,/Align for next turn/);
+assert.match(panel.title,/No turn-only restrictions verified/,
+  'Geometry-derived Cruise must not claim verified turn-only lanes');
+assert.equal(panel.children[2].children.length,2);
 render(null);
 assert.equal(panel.children.length,2,
   'Loss of OSM evidence must remove stale lane selection immediately');
