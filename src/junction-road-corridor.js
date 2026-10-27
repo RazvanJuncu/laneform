@@ -267,6 +267,17 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
   const result={status:'unavailable',path:empty(),coverage:[],samples:0,
     recommendation:null,diagnostics,
     reason:'No suitable reconstructed driving lane sections'};
+  // osm2streets lane polygons do not model ordered entry/circulation/exit
+  // transitions through large roundabouts reliably. Reusing the ordinary
+  // straight/left/right sampler here can suggest driving across the island.
+  // Keep the provider's road-level route until a dedicated roundabout graph
+  // planner can verify a complete circulating path.
+  const maneuverCode=String(instruction?.maneuver||'').toUpperCase();
+  if(/ROUNDABOUT|TRAFFIC_CIRCLE|ROTARY/.test(maneuverCode)){
+    result.reason='Roundabout lane mapping requires verified circulation and exit connectivity';
+    diagnostics.turnConnector='unsupported-roundabout';
+    return result;
+  }
   const profile=routeProfile(route),total=route?.properties?.summary?.lengthInMeters;
   if(profile.length<25||!Number.isFinite(total)||total<=0||
     !Number.isFinite(offset)||!Array.isArray(lanes))return result;
@@ -384,6 +395,15 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
     const leap=dist(last.point,s.point);
     if(leap>gap*1.6+3){close();active=[s];continue;}
     if(gap>SAMPLE*1.5){
+      // Do not use a generic gap interpolator to fabricate a lane-to-lane
+      // crossing when the dedicated turn connector rejected this maneuver.
+      // Route-level TomTom remains visible through that uncertain area.
+      const turnPosition=offset*scale;
+      if(sideOf(expectedLaneTurn(instruction)) &&
+        diagnostics.turnConnector!=='smooth' &&
+        last.d<turnPosition+28 && s.d>turnPosition-28){
+        close();active=[s];continue;
+      }
       const previous=active.length>1?active.at(-2).point:null;
       const following=smoothed.slice(i+1).find(x=>x)?.point;
       const bridge=quadraticBridge(previous,last.point,s.point,following);
@@ -409,7 +429,9 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
   const features=[],coverage=[],eligibleApproaches=[];
   for(const part of pieces){
     const beginning=part[0].d/scale,ending=part.at(-1).d/scale;
-    if(ending-beginning<12)continue;
+    // Small orphan lane fragments are useful for OSM debugging, but they
+    // create misleading little floating green lines in Junction Detail.
+    if(ending-beginning<24)continue;
     features.push({type:'Feature',geometry:{type:'LineString',
       coordinates:part.map(p=>p.point)},properties:{
       status:'inferred-lane-corridor',verified:false,
