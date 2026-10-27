@@ -38,6 +38,9 @@ assert.equal(junctionViewMode({...viewState,loaded:false}),'standard',
 assert.equal(junctionViewMode({...viewState,dismissedId:first.id}),'standard',
   'Zoom-out dismissal must override automatic zoom for that junction');
 assert.equal(junctionViewMode({...viewState,progress:0}),'detail');
+assert.equal(junctionViewMode({
+  ...viewState,target:{...first,offset:400},progress:128
+}),'detail','Junction Detail must be active with the target 272m ahead');
 assert.equal(junctionViewMode({...viewState,progress:0,
   dismissedId:first.id,forcedId:first.id}),'standard');
 assert.equal(junctionViewMode({...viewState,progress:500}),'standard',
@@ -86,7 +89,10 @@ assert.ok(main.includes('junctionFocus?2.6:3.4') &&
   main.includes("stroke(laneSegments,'#BDF8E8',3.8,.98)") &&
   main.includes('window.glideLanePaintInfo=') &&
   view.includes('buildLaneCorridor(') &&
-  view.includes('trajectory:()=>') &&
+  view.includes('trajectory:()=>usableTrajectory()') &&
+  view.includes('hasTrajectory:()=>!!usableTrajectory()') &&
+  main.includes('const laneTrajectory=junctionDetail?.trajectory()||null') &&
+  main.includes('if(laneCoverage.length)') &&
   view.includes("const actual=(id===IDS[8]||id===IDS[9])?'none':v"),
   'Lane trajectory must be drawn on the same topmost canvas as TomTom, with only non-covered centerline segments');
 assert.ok(view.includes('net.toGeojsonPlain()') &&
