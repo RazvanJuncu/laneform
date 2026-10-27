@@ -32,10 +32,8 @@ export function twoStageLaneGuidance(
   // A 1->1 passage requires no lane decision. Suppress the whole HUD,
   // including boring straight-through crossings, unless a lane really
   // appears or the outgoing lane group has multiple choices.
-  const meaningfulExpansion=validLaneSelection(nearApproach)&&
-    nearApproach.laneCount>approach.laneCount;
   const hasExitChoices=validLaneSelection(exit)&&exit.laneCount>1;
-  if(approach.laneCount===1&&!meaningfulExpansion&&!hasExitChoices)
+  if(approach.laneCount===1&&!widening&&!hasExitChoices)
     return null;
   // The '+' marks the NEWLY APPEARING lane, not necessarily the selected
   // one. A turn-only lane usually opens toward its matching turn side.
