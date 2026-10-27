@@ -103,6 +103,25 @@ the route canvas (`canvasLaneSegments>0`) from the unmodified provider route
 (`providerRoadClipped=false`). Synthetic geometry tests run through
 `scripts/check-lane-corridor.mjs`.
 
+### Junction trajectory smoothing
+
+At a routed left/right turn, the lane corridor no longer follows individual
+osm2streets polygon matches through the junction center. Overlapping and
+truncated lane polygons created jagged paths despite valid entry/exit lanes.
+The new `src/junction-turn-connector.js` trims unstable samples near the
+maneuver, seeks stable lane samples with nearby consistent lane/road IDs
+on both sides, and connects their measured tangents with one short cubic
+Bézier. It checks forward progress, gap size, and proximity to the chosen
+TomTom road corridor. The resulting smooth path remains provisional. When
+a convincing connection is missing, the unstable middle is suppressed rather
+than showing an invented lane jump. The rest of the road-level route remains
+visible. Real-world lane guidance is not yet verified.
+
+Unit and integration tests: `scripts/check-junction-turn-connector.mjs` and
+`scripts/check-junction-turn-integration.mjs`. In browser diagnostics inspect
+`glideJunctionInfo().corridorDiagnostics.turnConnector`: `smooth`,
+`suppressed-unstable-junction`, or `not-required`.
+
 ### Glide lane quick-check HUD
 
 The lane strip in the top-left maneuver console is **not TomTom's turn-arrow
