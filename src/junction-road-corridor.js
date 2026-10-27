@@ -155,8 +155,16 @@ function choice(candidates,prev,prefer,turn){
   const groupCenters=[...groups.values()].map(group=>
     group.reduce((s,c)=>s+c.offset,0)/group.length);
   const ranked=[...groups.values()].map(group=>{
+    // Without trustworthy travel-direction metadata, only consider mapped
+    // driving polygons strictly on the right of the routed centerline.
+    // This is conservative for the current right-hand-traffic prototype:
+    // oncoming left-side polygons must never be treated as approach lanes.
+    const safeGroup=group[0]?.direction==='Inferred'
+      ?group.filter(c=>c.offset<-.35):group;
+    if(!safeGroup.length)return null;
     // A mapped turn-only arrow contrary to the routed movement excludes it.
-    const eligible=group.filter(c=>!turn || !c.turns.length||c.turns.includes(turn));
+    const eligible=safeGroup.filter(c=>
+      !turn || !c.turns.length||c.turns.includes(turn));
     // Prefer actual mapped arrows for this movement where they exist.
     const marked=turn?eligible.filter(c=>c.turns.includes(turn)):[];
     const legal=marked.length?marked:eligible;
@@ -170,7 +178,7 @@ function choice(candidates,prev,prefer,turn){
     // Record the FULL directional lane group (including noneligible lanes),
     // not just lanes compatible with this turn. These are the same lane
     // coordinates used in the visible trajectory, not TomTom arrow data.
-    const allLanes=[...group].sort((a,b)=>a.direction==='Backward'
+    const allLanes=[...safeGroup].sort((a,b)=>a.direction==='Backward'
       ?b.index-a.index:a.index-b.index);
     const uniqueIndices=[...new Set(allLanes.map(c=>c.index))];
     const laneOrdinal=uniqueIndices.indexOf(chosen.index);
