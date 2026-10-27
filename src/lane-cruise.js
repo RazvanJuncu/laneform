@@ -78,7 +78,7 @@ export function cruiseFromMappedLanes({
     const selected=[...through].sort((a,b)=>
       Math.abs(a-ideal)-Math.abs(b-ideal)||a-b)[0];
     return {
-      source:'glide',status:'inferred',kind:'cruise',
+      source:'glide',status:'inferred',kind:'cruise',mode:'turn-only',
       laneCount:ordered.length,selected:[selected],
       allowedThrough:through,turnOnly:forced,
       distanceToJunction:candidate.offset-progress,
@@ -87,4 +87,32 @@ export function cruiseFromMappedLanes({
     };
   }
   return null;
+}
+
+// Useful but explicitly LOWER-confidence fallback when OSM has mapped
+// continuous directional lane geometry without explicit turn:lanes tagging.
+// This is preparation for an approaching ROUTED maneuver, NOT proof a lane
+// stays through some unknown earlier intersection. It never claims to avoid
+// turn-only lanes without actual turn restrictions.
+export function cruiseFromRouteAlignment({
+  corridor=null,distanceToManeuver=null,turnDirection=null
+}={}){
+  const rec=corridor?.recommendation;
+  const count=rec?.laneCount;
+  if(corridor?.status!=='provisional'||rec?.source!=='glide'||
+    rec?.status!=='inferred'||!Number.isInteger(count)||
+    count<2||count>9||!Array.isArray(rec.selected)||
+    rec.selected.length!==1||!Number.isInteger(rec.selected[0])||
+    rec.selected[0]<0||rec.selected[0]>=count||
+    !Number.isFinite(distanceToManeuver)||
+    distanceToManeuver<170||distanceToManeuver>600||
+    !/left|right/.test(turnDirection||'')||
+    (corridor.diagnostics?.approachSamples??0)<3||
+    !corridor.path?.features?.length)return null;
+  return {
+    source:'glide',status:'inferred',kind:'cruise',mode:'alignment',
+    laneCount:count,selected:[...rec.selected],turnOnly:[],
+    distanceToJunction:distanceToManeuver,
+    reason:'Geometric preparation for a routed turn; earlier turn-only restrictions unknown'
+  };
 }
