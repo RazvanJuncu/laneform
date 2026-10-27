@@ -4,6 +4,7 @@
 // an instruction at an ordinary straight-through intersection.
 import {routeProfile,positionAtDistance} from './osm-lane-geometry.js';
 import {expectedLaneTurn} from './lane-path-candidates.js';
+import {smoothMappedTurn} from './junction-turn-connector.js';
 
 const RAD=Math.PI/180;
 const SAMPLE=5;
@@ -253,7 +254,8 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
       })):[],
     rejected:{type:0,geometry:0,road:0,index:0,direction:0},
     inferredDirectionPolygons:0,eligibleDrivingPolygons:0,crossSections:0,
-    matchedSamples:0,continuousSections:0,approachSamples:0
+    matchedSamples:0,continuousSections:0,approachSamples:0,
+    turnConnector:'not-required',turnConnectorGap:0
   };
   const result={status:'unavailable',path:empty(),coverage:[],samples:0,
     recommendation:null,diagnostics,
@@ -346,10 +348,24 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
       if(sampled.slice(-6).every(s=>!s))prev=null;
     }
   }
+  // Crucial: near a turn, polygons from several arms overlap. Do not follow
+  // raw sample-to-sample road switches through the junction. Connect stable
+  // lane centers with one continuous, tangent-aligned cubic curve.
+  let smoothed=sampled;
+  if(sideOf(expectedLaneTurn(instruction))){
+    const result=smoothMappedTurn(sampled,{
+      turnDistance:offset*scale,
+      routeDistance:(point,d)=>distanceToRoute(point,profile,d)
+    });
+    smoothed=result.samples;
+    diagnostics.turnConnector=result.bridged?'smooth':
+      'suppressed-unstable-junction';
+    diagnostics.turnConnectorGap=result.gap||0;
+  }
   const pieces=[];let active=[];
   function close(){if(active.length>=3)pieces.push(active);active=[];}
-  for(let i=0;i<sampled.length;i++){
-    const s=sampled[i];
+  for(let i=0;i<smoothed.length;i++){
+    const s=smoothed[i];
     if(!s)continue;
     if(!active.length){active=[s];continue;}
     const last=active.at(-1),gap=s.d-last.d;
@@ -358,7 +374,7 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
     if(leap>gap*1.6+3){close();active=[s];continue;}
     if(gap>SAMPLE*1.5){
       const previous=active.length>1?active.at(-2).point:null;
-      const following=sampled.slice(i+1).find(x=>x)?.point;
+      const following=smoothed.slice(i+1).find(x=>x)?.point;
       const bridge=quadraticBridge(previous,last.point,s.point,following);
       if(!bridge || bridge.some(p=>distanceToRoute(p,profile,
         (last.d+s.d)/2)>21)){
