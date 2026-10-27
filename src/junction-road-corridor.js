@@ -86,6 +86,8 @@ function choice(candidates,prev,prefer,turn){
     if(!groups.has(k))groups.set(k,[]);
     groups.get(k).push(c);
   }
+  const groupCenters=[...groups.values()].map(group=>
+    group.reduce((s,c)=>s+c.offset,0)/group.length);
   const ranked=[...groups.values()].map(group=>{
     // A mapped turn-only arrow contrary to the routed movement excludes it.
     const legal=group.filter(c=>!turn || !c.turns.length||c.turns.includes(turn));
@@ -97,6 +99,10 @@ function choice(candidates,prev,prefer,turn){
       :prefer==='right'?byIndex[byIndex.length-1]
       :legal[0];
     const groupCenter=group.reduce((s,c)=>s+c.offset,0)/group.length;
+    // When a right-side lane group is visible but prohibited by an explicit
+    // turn arrow, do NOT route through its opposite-direction neighbor.
+    if(groupCenter>1.3 && groupCenters.some(x=>x<groupCenter-1.3))
+      return null;
     // Prefer the directional carriageway on the route's right-hand side.
     // Penalize switching directional road groups between samples.
     const wrongSide=Math.max(0,groupCenter+.45);
