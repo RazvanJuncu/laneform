@@ -11,7 +11,8 @@ import {twoStageLaneGuidance} from './lane-hud-model.js';
 import {isJunctionPhase,stableMappedLaneGroup}
   from './lane-junction-policy.js';
 import {cruiseFromMappedLanes,cruiseFromRouteAlignment} from './lane-cruise.js';
-import {cruiseFromLaneContinuity} from './lane-cruise-continuity.js';
+import {cruiseFromLaneContinuity,cruiseFromAvailableLanes}
+  from './lane-cruise-continuity.js';
 import {nextRollingStation,rollingAreaPoint,ROLLING_AREA_RADIUS_METERS}
   from './cruise-rolling-window.js';
 import {routeProfile,positionAtDistance} from './osm-lane-geometry.js';
@@ -274,12 +275,18 @@ export function createJunctionDetail({
     }
     const current=target&&state.route.properties?.guidance?.
       instructions?.[target.index];
-    return target?cruiseFromRouteAlignment({
+    const alignment=target?cruiseFromRouteAlignment({
       corridor:e?.corridor,
       distanceToManeuver:target.offset-state.progress,
       turnDirection:/left/.test(expectedLaneTurn(current)||'')?'left':
         /right/.test(expectedLaneTurn(current)||'')?'right':null
     }):null;
+    if(alignment)return alignment;
+    const available=batches.map(b=>cruiseFromAvailableLanes({
+      laneFrames:b.corridor?.laneFrames||[],progress:state.progress
+    })).filter(Boolean).sort((a,b)=>
+      a.distanceToJunction-b.distanceToJunction);
+    return available[0]||null;
   }
   function usableTrajectory(){
     if(!state.route||!state.target)return null;
