@@ -59,18 +59,33 @@ function matchGroups(approaches,exits,roads){
   }
   pairs.sort((a,b)=>a.score-b.score);
   if(!pairs.length)return null;
-  // When two similarly plausible road combinations exist without road-level
-  // connectivity, an aerial-looking line would be misleading.
+  // When two similarly plausible road combinations exist, an aerial-looking
+  // line would be misleading, even if both have road-level connectivity.
   if(pairs.length>1 && pairs[1].score-pairs[0].score<9)return null;
   return pairs[0];
 }
 function nextTurnPreference(next,offset){
-  const turn=expectedLaneTurn(next?.instruction);
-  const gap=Number(next?.offset)-offset;
-  if(!Number.isFinite(gap)||gap<=0||gap>350)return null;
-  if(['left','slight_left','sharp_left'].includes(turn))return 'left';
-  if(['right','slight_right','sharp_right'].includes(turn))return 'right';
+  const candidates=Array.isArray(next)?next:[next];
+  for(const target of candidates){
+    const gap=Number(target?.offset)-offset;
+    if(!Number.isFinite(gap)||gap<=0||gap>350)continue;
+    const side=sideOfTurn(expectedLaneTurn(target?.instruction));
+    if(side)return {side,target,gap};
+  }
   return null;
+}
+function mappedNextLaneIndex(route,reconstructed,nextTarget,exitLanes,side){
+  if(!nextTarget)return -1;
+  // Only use actual lane geometry when it falls inside the OSM area that was
+  // already fetched. No extra API request just to predict the second turn.
+  const options=candidateApproachLanePaths(
+    route,nextTarget.instruction,reconstructed,{inferUnmarked:true});
+  const matches=grouped(options.features).find(g=>
+    g[0].properties.road===exitLanes[0].properties.road &&
+    g[0].properties.direction===exitLanes[0].properties.direction);
+  if(!matches?.length)return -1;
+  const preferred=matches[selectOrdinal(matches.length,side)];
+  return exitLanes.findIndex(l=>l.properties.index===preferred.properties.index);
 }
 function sideOfTurn(turn){
   if(['left','slight_left','sharp_left'].includes(turn))return 'left';
@@ -139,13 +154,23 @@ export function planJunctionTrajectory({route,instruction,reconstructed=[],roads
   const pair=matchGroups(approaches.features,exits.features,roads);
   if(!pair)return {...fallback,approaches,exits};
   const side=sideOfTurn(turn);
-  const nextSide=nextTurnPreference(next,offset);
-  const approachSide=side || nextSide;
-  // Turning lanes keep their natural relative position through the junction.
-  // For a straight movement, choose the exit side needed at the NEXT turn.
-  const exitSide=side || nextSide;
-  const inIndex=selectOrdinal(pair.a.length,approachSide);
-  const outIndex=selectOrdinal(pair.b.length,exitSide);
+  const lookout=nextTurnPreference(next,offset);
+  const nextSide=lookout?.side||null;
+  // Turns preserve the natural side. On a straight movement, seek the
+  // exact next-turn lane when already mapped, otherwise use the side heuristic.
+  let outIndex=selectOrdinal(pair.b.length,side||nextSide);
+  let inIndex=selectOrdinal(pair.a.length,side||nextSide);
+  if(!side && lookout){
+    const mapped=mappedNextLaneIndex(
+      route,reconstructed,lookout.target,pair.b,nextSide);
+    if(mapped>=0){
+      outIndex=mapped;
+      // Do not manufacture a lane change through the first intersection:
+      // retain the corresponding approach ordinal when lane counts differ.
+      inIndex=Math.round(outIndex*(pair.a.length-1)/
+        Math.max(1,pair.b.length-1));
+    }
+  }
   const incoming=pair.a[inIndex],outgoing=pair.b[outIndex];
   const begin=incoming.geometry.coordinates,end=outgoing.geometry.coordinates;
   const bridge=bezierBetween(begin,end);
