@@ -5,6 +5,7 @@
 import {routeProfile,positionAtDistance} from './osm-lane-geometry.js';
 import {expectedLaneTurn} from './lane-path-candidates.js';
 import {smoothMappedTurn} from './junction-turn-connector.js';
+import {suppressLaneSamplingSpikes} from './lane-sampling-filter.js';
 
 const RAD=Math.PI/180;
 const SAMPLE=5;
@@ -264,7 +265,8 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
     matchedSamples:0,continuousSections:0,approachSamples:0,
     turnConnector:'not-required',turnConnectorGap:0,
     turnConnectorMethod:null,turnRadiusMeters:null,
-    turnAngleDegrees:null
+    turnAngleDegrees:null,triangleSpikesCorrected:0,
+    triangleSpikesDiscarded:0
   };
   const result={status:'unavailable',path:empty(),coverage:[],samples:0,
     recommendation:null,nearApproachRecommendation:null,
@@ -373,12 +375,19 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
       if(sampled.slice(-6).every(s=>!s))prev=null;
     }
   }
-  // Crucial: near a turn, polygons from several arms overlap. Do not follow
-  // raw sample-to-sample road switches through the junction. Connect stable
-  // lane centers with one continuous, tangent-aligned cubic curve.
-  let smoothed=sampled;
+  // Suppress tiny, short-lived sideways OSM polygon snaps on locally straight
+  // segments BEFORE fitting the maneuver connector. Never smooth a real turn
+  // or a sustained, properly mapped lane change.
+  const filtered=suppressLaneSamplingSpikes(sampled,{
+    profile,positionAtDistance
+  });
+  diagnostics.triangleSpikesCorrected=filtered.diagnostics.corrected;
+  diagnostics.triangleSpikesDiscarded=filtered.diagnostics.discarded;
+  // Raw polygon matches are ambiguous inside the intersection. Connect
+  // stable entry and exit lane axes, or keep the road-level fallback.
+  let smoothed=filtered.samples;
   if(sideOf(expectedLaneTurn(instruction))){
-    const result=smoothMappedTurn(sampled,{
+    const result=smoothMappedTurn(smoothed,{
       turnDistance:offset*scale,
       routeDistance:(point,d)=>distanceToRoute(point,profile,d)
     });
