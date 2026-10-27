@@ -175,15 +175,17 @@ export function createJunctionDetail({
     });
     // The next maneuver is available from the selected route even when its
     // own OSM area has not been fetched. No additional TomTom API calls.
-    const following=state.targets.find(t=>t.offset>next.offset+1);
-    const followingInstruction=following
-      ?state.route.properties?.guidance?.instructions?.[following.index]
-      :null;
+    const following=state.targets
+      .filter(t=>t.offset>next.offset+1 && t.offset-next.offset<=350)
+      .slice(0,4).map(t=>({
+        offset:t.offset,
+        instruction:state.route.properties?.guidance?.instructions?.[t.index]
+      }));
     cached.planner=planJunctionTrajectory({
       route:state.route,instruction,
       reconstructed:cached.data.lanes.features,
       roads:cached.data.roads?.features||[],
-      next:following?{offset:following.offset,instruction:followingInstruction}:null
+      next:following
     });
   }
   function updateButton(){
