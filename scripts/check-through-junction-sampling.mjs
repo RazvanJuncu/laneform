@@ -24,6 +24,15 @@ const candidates=sampleImportantThroughJunctions({
 assert.equal(candidates.length,1);
 assert.equal(candidates[0].kind,'through');
 assert.equal(candidates[0].arms,3);
+
+// Actual osm2streets RoadID Display formats are not always numeric.
+const displayNames=sampleImportantThroughJunctions({
+  route,roads:[junction(site,['Road #11 -> Road #12',
+    'Road #11 -> Road #13'])],centerOffset:240,excludeOffsets:[240]
+});
+assert.equal(displayNames.length,1,
+  'Recognize non-numeric osm2streets movement IDs');
+assert.equal(displayNames[0].arms,3);
 assert.ok(candidates[0].offset>90&&candidates[0].offset<160);
 assert.equal(sampleImportantThroughJunctions({
   route,roads:[junction(site)],centerOffset:240,excludeOffsets:[130]
