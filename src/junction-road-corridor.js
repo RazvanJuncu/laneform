@@ -110,6 +110,14 @@ function choice(candidates,prev,prefer,turn){
     const chosen=prefer==='left'?byIndex[0]
       :prefer==='right'?byIndex[byIndex.length-1]
       :legal[0];
+    // Record the FULL directional lane group (including noneligible lanes),
+    // not just lanes compatible with this turn. These are the same lane
+    // coordinates used in the visible trajectory, not TomTom arrow data.
+    const allLanes=[...group].sort((a,b)=>a.direction==='Backward'
+      ?b.index-a.index:a.index-b.index);
+    const uniqueIndices=[...new Set(allLanes.map(c=>c.index))];
+    const laneOrdinal=uniqueIndices.indexOf(chosen.index);
+    if(laneOrdinal<0||uniqueIndices.length>9)return null;
     const groupCenter=group.reduce((s,c)=>s+c.offset,0)/group.length;
     // When a right-side lane group is visible but prohibited by an explicit
     // turn arrow, do NOT route through its opposite-direction neighbor.
@@ -124,7 +132,8 @@ function choice(candidates,prev,prefer,turn){
     const score=Math.abs(groupCenter)*.28+
       wrongSide*4+Math.max(0,-groupCenter-9)*.6+
       continuity+leap;
-    return {chosen,score};
+    return {chosen:{...chosen,laneCount:uniqueIndices.length,
+      laneOrdinal},score};
   }).filter(Boolean).sort((a,b)=>a.score-b.score);
   if(!ranked.length)return null;
   if(ranked.length>1&&!prev&&Math.abs(ranked[1].score-ranked[0].score)<.3)
@@ -168,6 +177,7 @@ function distanceToRoute(p,profile,nearD){
 export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
   next=[],radius=125}={}){
   const result={status:'unavailable',path:empty(),coverage:[],samples:0,
+    recommendation:null,
     reason:'No suitable reconstructed driving lane sections'};
   const profile=routeProfile(route),total=route?.properties?.summary?.lengthInMeters;
   if(profile.length<25||!Number.isFinite(total)||total<=0||
@@ -215,7 +225,8 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
       prev=null;
     }else if(match){
       sampled.push({d,point:match.point,road:match.road,
-        direction:match.direction,index:match.index});
+        direction:match.direction,index:match.index,
+        laneOrdinal:match.laneOrdinal,laneCount:match.laneCount});
       prev=match;
     }else{
       sampled.push(null);
@@ -247,7 +258,7 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
     active.push(s);
   }
   close();
-  const features=[],coverage=[];
+  const features=[],coverage=[],eligibleApproaches=[];
   for(const part of pieces){
     const beginning=part[0].d/scale,ending=part.at(-1).d/scale;
     if(ending-beginning<12)continue;
@@ -257,9 +268,32 @@ export function buildLaneCorridor({route,offset,lanes=[],instruction=null,
       description:'Reconstructed driving-lane trajectory, not validated guidance'
     }});
     coverage.push([beginning,ending]);
+    // Only samples actually present in a displayed path can power the HUD.
+    // Sample before the maneuver, away from the intersection's turning gap.
+    for(const sample of part){
+      const at=sample.d/scale;
+      if(Number.isInteger(sample.laneCount)&&sample.laneCount>=1&&
+        Number.isInteger(sample.laneOrdinal)&&
+        sample.laneOrdinal>=0&&sample.laneOrdinal<sample.laneCount &&
+        at>=offset-115&&at<=offset-12){
+        eligibleApproaches.push({...sample,at});
+      }
+    }
   }
   if(!features.length)return result;
+  // An approach sample ~55m before the junction is usually well outside its
+  // central geometry. We use THAT exact lane index for the HUD squares.
+  eligibleApproaches.sort((a,b)=>
+    Math.abs(a.at-(offset-55))-Math.abs(b.at-(offset-55)));
+  const first=eligibleApproaches[0];
+  const recommendation=first && Math.abs(first.at-(offset-55))<=50
+    ?{source:'glide',status:'inferred',laneCount:first.laneCount,
+      selected:[first.laneOrdinal],laneIndex:first.index,
+      road:first.road,direction:first.direction,
+      sampleOffsetMeters:first.at,junctionOffsetMeters:offset}
+    :null;
   return {status:'provisional',path:{type:'FeatureCollection',features},
-    coverage,samples:features.reduce((n,f)=>n+f.geometry.coordinates.length,0),
+    coverage,recommendation,
+    samples:features.reduce((n,f)=>n+f.geometry.coordinates.length,0),
     reason:'Driving-lane cross sections and local trajectory lookahead'};
 }
