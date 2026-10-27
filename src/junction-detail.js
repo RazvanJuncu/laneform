@@ -6,6 +6,7 @@ import {buildJunctionTargets,upcomingJunction,junctionCacheKey,junctionViewMode}
 import {smallAreaOsmUrl,MAX_OSM_BYTES,validateOsmXML,
   validateGeojson,blankCollection} from './street-geometry-adapter.js';
 import {partitionJunctionGeometry} from './junction-focus.js';
+import {simplifiedJunctionGeometry} from './junction-simplified-map.js';
 import {candidateApproachLanePaths} from './lane-path-candidates.js';
 import {buildJunctionOrdinalCandidates} from './junction-lane-bridge.js';
 import {planJunctionTrajectory} from './junction-driver-planner.js';
@@ -91,17 +92,17 @@ function styleLayers(map){
   const fade={duration:650,delay:0};
   const layers=[
     {id:IDS[0],type:'fill',source:DATA_SOURCE,
-      paint:{'fill-color':'#52636F','fill-opacity':.075,
+      paint:{'fill-color':'#263A45','fill-opacity':.64,
         'fill-opacity-transition':fade}},
     {id:IDS[1],type:'line',source:DATA_SOURCE,
-      paint:{'line-color':'#667B88','line-width':.65,
-        'line-opacity':.12,'line-opacity-transition':fade}},
+      paint:{'line-color':'#526875','line-width':.65,
+        'line-opacity':.22,'line-opacity-transition':fade}},
     {id:IDS[2],type:'fill',source:FOCUS_SOURCE,
-      paint:{'fill-color':'#AFC4D0','fill-opacity':.205,
+      paint:{'fill-color':'#40545D','fill-opacity':.47,
         'fill-opacity-transition':fade}},
     {id:IDS[3],type:'line',source:FOCUS_SOURCE,
-      paint:{'line-color':'#C8D7E0','line-width':1.1,
-        'line-opacity':.54,'line-opacity-transition':fade}},
+      paint:{'line-color':'#94A7AE','line-width':.7,
+        'line-opacity':.22,'line-opacity-transition':fade}},
     {id:IDS[4],type:'line',source:MARKS_SOURCE,
       paint:{'line-color':'#DDE7EC','line-width':1.3,
         'line-opacity':.67,'line-opacity-transition':fade}},
@@ -137,22 +138,25 @@ function show(map,visible){
   const v=visible?'visible':'none';
   for(const id of IDS){
     if(!map.getLayer(id))continue;
-    // The main route canvas owns ALL trajectory rendering. Keeping the old
-    // lane line layer visible underneath that canvas caused two competing
-    // path painters with no guaranteed visual precedence.
-    const actual=(id===IDS[8]||id===IDS[9])?'none':v;
+    // Only draw simple drivable road surfaces and faint lane divisions.
+    // Original OSM markings, arrows, intersection debug geometry, candidate
+    // traces and duplicate path layers clutter the driver's overhead view.
+    const actual=[IDS[0],IDS[1],IDS[2],IDS[3]].includes(id)?v:'none';
     if(map.getLayoutProperty(id,'visibility')!==actual)
       map.setLayoutProperty(id,'visibility',actual);
   }
 }
 function assign(map,data,selection,candidates,ordinal,planner,corridor){
   if(!styleLayers(map))return;
-  map.getSource(DATA_SOURCE).setData(selection?.context||data?.lanes||EMPTY);
-  map.getSource(FOCUS_SOURCE).setData(selection?.focus||EMPTY);
-  map.getSource(MARKS_SOURCE).setData(selection?.markings||EMPTY);
-  map.getSource(JUNCTION_SOURCE).setData(data?.junctions||EMPTY);
-  map.getSource(CANDIDATE_SOURCE).setData(candidates||EMPTY);
-  map.getSource(EXIT_SOURCE).setData(ordinal?.exits||EMPTY);
+  const simplified=simplifiedJunctionGeometry(data,selection);
+  map.getSource(DATA_SOURCE).setData(simplified.roads);
+  map.getSource(FOCUS_SOURCE).setData(simplified.focus);
+  // OSM markings and raw debug traces are kept for analysis, but do not
+  // compete with Glide's clean, lane-centered route visualization.
+  map.getSource(MARKS_SOURCE).setData(EMPTY);
+  map.getSource(JUNCTION_SOURCE).setData(EMPTY);
+  map.getSource(CANDIDATE_SOURCE).setData(EMPTY);
+  map.getSource(EXIT_SOURCE).setData(EMPTY);
   // Only the geometry-first corridor is displayed as a lane trajectory.
   // Keep legacy ordinal guesses available for diagnostics, not navigation.
   map.getSource(PATH_SOURCE).setData(
@@ -456,6 +460,10 @@ export function createJunctionDetail({
       corridorStatus:entry()?.corridor?.status||'unavailable',
       corridorReason:entry()?.corridor?.reason||'No corridor data',
       corridorDiagnostics:entry()?.corridor?.diagnostics||null,
+      simplifiedRoadCount:entry()?.data?
+        simplifiedJunctionGeometry(entry().data,entry()?.selection).roadCount:0,
+      simplifiedFocusCount:entry()?.data?
+        simplifiedJunctionGeometry(entry().data,entry()?.selection).focusCount:0,
       trajectoryPainter:'canvas-above-map',
       mapTrajectoryFeatures:entry()?.corridor?.path?.features?.length||0,
       corridorSamples:entry()?.corridor?.samples||0,
