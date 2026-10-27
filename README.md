@@ -155,6 +155,41 @@ directionality) is needed before enabling roundabout lane suggestions.
 This protects against false guidance but does not fix missing OSM geometry.
 The existing corridor tests cover the roundabout fallback and orphan fragments.
 
+### Exclusive Cruise / junction guidance and adjustable simulation speed
+
+When an upcoming routed junction enters the 380 m approach window (or an
+important mapped through-junction is detected closer ahead), Glide switches
+from **Cruise's slim oval status** to **Junction Lane Assist's square
+recommendations**. The two are mutually exclusive even if OSM reconstruction
+is not ready. Cruise resumes after passing the intersection by 35 m.
+Both straight-through and turning intersections may show square lane
+recommendations when the OSM road reconstruction supports 2+ directional
+lanes. A **1 → 1 lane** situation produces neither unnecessary square
+recommendations nor Cruise guidance.
+
+For left/right turns without explicit matching `allowed_turns` data,
+Lane Assist defaults to the **leftmost/rightmost approach lane** and
+similarly defaults to the **leftmost/rightmost exit lane** when no verified
+lane connector is present. Explicit mapped turn restrictions and verified
+connectors override the heuristics. If a stable directional OSM lane group
+exists but an approach/exit lane ordinal is unstable, Glide can still
+provide a count from repeated cross-sections, never from a single sample.
+These are inferred previews, not legally verified driving instructions.
+
+Between intersections, Cruise wakes up for a stable mapped multi-lane
+section or a new lane appearing up the road, even when no turn-only
+restriction is mapped; in that case **no oval is selected**, because lane
+count alone does not prove which lane is preferable. Confirmed-looking
+lane highlights require stronger tag, continuity, or route-alignment data.
+
+Simulation Controls now offer a **0.5× to 15× playback-speed slider**,
+with **7×** matching the earlier default. The nominal 1× pace is 45 km/h;
+the readout also displays the approximate accelerated visualization pace.
+This changes simulated vehicle progression, not TomTom's real-world
+travel-time estimate. Tests: `scripts/check-lane-junction-policy.mjs`,
+`scripts/check-simulation-speed.mjs` and
+`scripts/check-lane-cruise-continuity.mjs`.
+
 ### Continuous lane sampling and route-aware bifurcations
 
 Cruise no longer waits for a TomTom turn to investigate the road ahead.
@@ -200,11 +235,11 @@ verified against lane markings, traffic rules or the driver's actual lane.
 
 ### Cruise: quiet ongoing lane awareness
 
-The compact **Cruise** strip lives below the imminent maneuver guidance in
-simulation and stays visible during route playback, even when no defensible
-lane recommendation is known. In that case it reads
-`Monitoring · lanes unverified`, with no invented lane count or "all clear"
-claim.
+The compact **Cruise** strip is now used **only between junctions** and
+only where reconstructed road geometry provides a meaningful multi-lane
+choice or a credible upcoming widening. There is no Cruise display on a
+single-lane road with no upcoming lane choice, and no persistent
+`Monitoring` placeholder when lane geometry is unavailable.
 
 Cruise has **two distinguishable levels**. First it uses existing
 reconstructed OSM `allowed_turns` markings at nearby straight-through
