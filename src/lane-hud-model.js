@@ -14,7 +14,8 @@ export function validLaneSelection(value){
 export function twoStageLaneGuidance(
   approach,exit,distanceToManeuver,{
     revealMeters=EXIT_LANE_REVEAL_METERS,
-    nearApproach=null,wideningRevealMeters=WIDENING_REVEAL_METERS
+    nearApproach=null,wideningRevealMeters=WIDENING_REVEAL_METERS,
+    selectedTurnSide=null
   }={}
 ){
   if(!validLaneSelection(approach)||
@@ -28,7 +29,27 @@ export function twoStageLaneGuidance(
     nearApproach.laneCount>approach.laneCount&&
     distanceToManeuver<=wideningRevealMeters;
   const selected=widening?nearApproach:approach;
+  // A 1->1 passage requires no lane decision. Suppress the whole HUD,
+  // including boring straight-through crossings, unless a lane really
+  // appears or the outgoing lane group has multiple choices.
+  const meaningfulExpansion=validLaneSelection(nearApproach)&&
+    nearApproach.laneCount>approach.laneCount;
+  const hasExitChoices=validLaneSelection(exit)&&exit.laneCount>1;
+  if(approach.laneCount===1&&!meaningfulExpansion&&!hasExitChoices)
+    return null;
+  // The '+' marks the NEWLY APPEARING lane, not necessarily the selected
+  // one. A turn-only lane usually opens toward its matching turn side.
+  // Avoid pretending the added side is verified when maneuver is unknown.
+  const addedCount=widening?selected.laneCount-approach.laneCount:0;
+  const side=widening&&selectedTurnSide==='left'?'left':
+    widening&&selectedTurnSide==='right'?'right':null;
+  const addedLaneIndices=side==='left'
+    ?Array.from({length:addedCount},(_,i)=>i)
+    :side==='right'
+      ?Array.from({length:addedCount},(_,i)=>
+        selected.laneCount-addedCount+i):[];
   return {...selected,distanceToManeuver,
     widensFrom:widening?approach.laneCount:null,
+    addedLaneIndices,
     exit:shown?exit:null,exitRevealMeters:revealMeters};
 }
