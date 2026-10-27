@@ -127,6 +127,13 @@
     </div>
     <details class="simulation-details">
       <summary>Simulation controls</summary>
+      <div class="sim-speed-caption">
+        <label for="navSpeed">Driving simulation speed</label>
+        <output id="navSpeedValue" for="navSpeed">7× · ≈315 km/h preview</output>
+      </div>
+      <input id="navSpeed" type="range" min="0.5" max="15" step="0.5"
+        value="7" aria-label="Navigation simulation playback speed">
+      <label class="sim-scrub-label" for="navScrub">Route position</label>
       <input id="navScrub" type="range" min="0" max="1000" step="1" value="0" aria-label="Simulated distance along route">
       <p>Preview only. No live position, automatic rerouting or verified lane guidance.</p>
     </details>
