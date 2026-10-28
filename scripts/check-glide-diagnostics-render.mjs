@@ -31,7 +31,7 @@ const sandbox={
  junctionDetail:{info:()=>info},
  state:{mode:'navigation',sim:{active:true,playing:false}},
  selectedRoute:()=>({properties:{summary:{lengthInMeters:4000}}}),
- evaluateGlideDiagnostics
+ evaluateGlideDiagnostics,cachedProviderTurnLanes:()=>null
 };
 vm.createContext(sandbox);
 vm.runInContext(main.slice(start,end)+
