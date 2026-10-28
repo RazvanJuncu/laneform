@@ -3,7 +3,7 @@
 // Geometry is OSM-derived; provisional lane-level planning is for preview only.
 import {buildJunctionTargets,upcomingJunction,junctionCacheKey,junctionViewMode,
   junctionDownloadEligible,isPreviewManeuver} from './junction-logic.js';
-import {smallAreaOsmUrl,MAX_OSM_BYTES,validateOsmXML,
+import {smallAreaOsmUrl,smallAreaOverpassUrl,MAX_OSM_BYTES,validateOsmXML,
   validateGeojson,blankCollection} from './street-geometry-adapter.js';
 import {partitionJunctionGeometry} from './junction-focus.js';
 import {simplifiedJunctionGeometry} from './junction-simplified-map.js';
@@ -13,8 +13,8 @@ import {isJunctionPhase,stableMappedLaneGroup}
 import {cruiseFromMappedLanes,cruiseFromRouteAlignment} from './lane-cruise.js';
 import {cruiseFromLaneContinuity,cruiseFromAvailableLanes}
   from './lane-cruise-continuity.js';
-import {nextRollingStation,rollingAreaPoint,ROLLING_AREA_RADIUS_METERS}
-  from './cruise-rolling-window.js';
+import {nextRollingStation,rollingAreaPoint,ROLLING_AREA_RADIUS_METERS,
+  prioritizeJunctionDownload} from './cruise-rolling-window.js';
 import {reusableAreaCandidates,reconstructedJunctionCovered}
   from './osm-area-reuse.js';
 import {routeProfile,positionAtDistance} from './osm-lane-geometry.js';
@@ -80,14 +80,14 @@ async function reconstruct(xml){
   }finally{net?.free?.();}
 }
 async function downloadJunction(position,radiusMeters=135){
-  const url=smallAreaOsmUrl(position,radiusMeters);
+  const url=smallAreaOverpassUrl(position,radiusMeters);
   const aborter=new AbortController();
   const timer=setTimeout(()=>aborter.abort(),12000);
   try{
     const response=await fetch(url,{signal:aborter.signal,credentials:'omit'});
-    if(!response.ok)throw Error('OSM HTTP '+response.status);
+    if(!response.ok)throw Error('Overpass HTTP '+response.status);
     const bytes=Number(response.headers.get('content-length'));
-    if(bytes>MAX_OSM_BYTES)throw Error('OSM area too large');
+    if(bytes>MAX_OSM_BYTES)throw Error('Overpass area too large');
     const xml=await response.text();
     validateOsmXML(xml);
     return xml;
@@ -461,6 +461,16 @@ export function createJunctionDetail({
     if(state.pendingTimer!==null)clearTimeout(state.pendingTimer);
     state.pendingTimer=null;
   }
+  function junctionNeedsPriority(next=state.target){
+    if(!junctionDownloadEligible(next,state.progress))return false;
+    const total=state.route?.properties?.summary?.lengthInMeters;
+    const station=nextRollingStation(state.progress,total);
+    return prioritizeJunctionDownload({
+      aheadMeters:next.offset-state.progress,
+      rollingStation:station,
+      rollingCached:station!==null&&state.rollingCache.has(station)
+    });
+  }
   function ensureNextPrepared(){
     const next=state.target;
     if(!next || !state.route)return;
@@ -469,6 +479,11 @@ export function createJunctionDetail({
     // Rolling road analysis owns distant parts of the route.
     if(!junctionDownloadEligible(next,state.progress)){
       clearPending();return;
+    }
+    if(!junctionNeedsPriority(next)){
+      clearPending();
+      state.reason='rolling-first';
+      return;
     }
     // Highest priority: use geometry already fetched by Cruise. This is
     // instant even during the 30s network cooldown and costs zero requests.
@@ -534,7 +549,7 @@ export function createJunctionDetail({
   function ensureRollingPrepared(){
     if(!state.route)return;
     // A REAL maneuver in prefetch range wins the shared scheduler.
-    if(junctionDownloadEligible(state.target,state.progress)){
+    if(junctionNeedsPriority()){
       const targetKey=junctionCacheKey(state.target.position);
       if(!state.cache.has(targetKey)){
         clearRollingPending();
@@ -657,7 +672,7 @@ export function createJunctionDetail({
     setTarget(next);
     // A selected target may be kilometres away. Begin prefetch only when
     // simulation enters its lookahead window, not at first selection.
-    if(junctionDownloadEligible(state.target,state.progress))
+    if(junctionNeedsPriority())
       ensureNextPrepared();
     updateAppearance();
     ensureRollingPrepared();
@@ -766,7 +781,7 @@ export function createJunctionDetail({
     position:()=>state.target?.position||null,
     currentTarget:()=>state.target,
     laneState:()=>{
-      if(!state.display||!state.target)return null;
+      if(!junctionPhase()||!state.target)return null;
       if(activeGuidance()?.kind==='through' ||
         expectedLaneTurn(state.route?.properties?.guidance?.
           instructions?.[state.target.index])==='through')return null;
