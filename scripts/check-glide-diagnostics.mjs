@@ -30,7 +30,8 @@ const parallelActivity=evaluateGlideDiagnostics({...basic,
 },context);
 assert.equal(parallelActivity.sections[1].status,'blocked',
   'An existing failed junction must not appear pending due to rolling download');
-assert.equal(parallelActivity.sections[2].status,'blocked');
+assert.equal(parallelActivity.sections[2].status,'unavailable',
+ 'Fallback should be explicit rather than suggesting a usable lane choice');
 assert.equal(parallelActivity.counters.osmProvider,'Private.coffee');
 assert.equal(parallelActivity.counters.osmProviderBackoffSeconds,120);
 const cooldown=evaluateGlideDiagnostics({...basic,
