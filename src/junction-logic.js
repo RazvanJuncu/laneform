@@ -5,6 +5,29 @@
 import {routeProfile,positionAtDistance} from './osm-lane-geometry.js';
 import {isArrivalInstruction} from './maneuver-guidance.js';
 
+export function isPreviewManeuver(instruction){
+  if(!instruction||isArrivalInstruction(instruction))return false;
+  const code=String(instruction.maneuver||'').toUpperCase();
+  const type=String(instruction.instructionType||'').toUpperCase();
+  const message=String(instruction.message||'').trim().toLowerCase();
+  // A straight-through crossing belongs to Cruise's lane-continuity
+  // lookahead, NOT an "approach + after junction" maneuver preview.
+  if(/STRAIGHT|CONTINUE|DEPART|START|FOLLOW|HEAD/.test(code))return false;
+  if(/DEPARTURE|START_OF_ROUTE/.test(type))return false;
+  if(/^continue (straight|ahead|on)\b|^go straight\b|^head (straight|north|south|east|west)\b/.test(message))
+    return false;
+  // True bends, forks, merges and roundabout entries still merit a
+  // focused preview; do not depend on turn:lanes tagging for this.
+  return !!(code||type||message);
+}
+export function junctionDownloadEligible(target,progress,{
+  lookaheadMeters=850,clearanceMeters=35
+}={}){
+  if(!target||!Number.isFinite(progress)||!Number.isFinite(target.offset))
+    return false;
+  const ahead=target.offset-progress;
+  return ahead>=-clearanceMeters&&ahead<=lookaheadMeters;
+}
 export function buildJunctionTargets(route){
   const summaryMeters=route?.properties?.summary?.lengthInMeters;
   const instructions=route?.properties?.guidance?.instructions;
@@ -15,7 +38,7 @@ export function buildJunctionTargets(route){
   const targets=[];
   const ordered=instructions.map((instruction,index)=>({instruction,index}))
     .filter(({instruction})=>
-      !isArrivalInstruction(instruction) &&
+      isPreviewManeuver(instruction) &&
       Number.isFinite(instruction?.routeOffsetInMeters))
     .sort((a,b)=>a.instruction.routeOffsetInMeters-b.instruction.routeOffsetInMeters);
 
