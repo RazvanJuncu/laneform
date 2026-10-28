@@ -3,8 +3,9 @@
 // Geometry is OSM-derived; provisional lane-level planning is for preview only.
 import {buildJunctionTargets,upcomingJunction,junctionCacheKey,junctionViewMode,
   junctionDownloadEligible,isPreviewManeuver} from './junction-logic.js';
-import {smallAreaOsmUrl,smallAreaOverpassUrl,MAX_OSM_BYTES,validateOsmXML,
-  validateGeojson,blankCollection} from './street-geometry-adapter.js';
+import {validateOsmXML,validateGeojson,blankCollection}
+  from './street-geometry-adapter.js';
+import {createOsmGeometryTransport} from './osm-geometry-transport.js';
 import {partitionJunctionGeometry} from './junction-focus.js';
 import {simplifiedJunctionGeometry} from './junction-simplified-map.js';
 import {twoStageLaneGuidance} from './lane-hud-model.js';
@@ -34,6 +35,7 @@ const CANDIDATE_SOURCE='glide-junction-approach-candidates';
 const EXIT_SOURCE='glide-junction-provisional-exits';
 const PATH_SOURCE='glide-junction-driver-trajectory';
 const COOLDOWN_MS=30000;
+const osmTransport=createOsmGeometryTransport();
 const MAX_CACHE=5;
 const IDS=['glide-junction-surface','glide-junction-edges',
   'glide-junction-focus-fill','glide-junction-focus-edge',
@@ -80,21 +82,7 @@ async function reconstruct(xml){
   }finally{net?.free?.();}
 }
 async function downloadJunction(position,radiusMeters=135){
-  const url=smallAreaOverpassUrl(position,radiusMeters);
-  const aborter=new AbortController();
-  const timer=setTimeout(()=>aborter.abort(),12000);
-  try{
-    // Overpass public endpoint requires a browser referrer. Share only the
-    // Glide origin, never the route path or user coordinates as a referrer.
-    const response=await fetch(url,{signal:aborter.signal,
-      credentials:'omit',referrerPolicy:'origin'});
-    if(!response.ok)throw Error('Overpass HTTP '+response.status);
-    const bytes=Number(response.headers.get('content-length'));
-    if(bytes>MAX_OSM_BYTES)throw Error('Overpass area too large');
-    const xml=await response.text();
-    validateOsmXML(xml);
-    return xml;
-  }finally{clearTimeout(timer);}
+  return osmTransport.download(position,radiusMeters);
 }
 // MapLibre rendering: route-matched nearby lane polygons stand out subtly;
 // all other reconstructed arms remain context, not navigation instructions.
@@ -493,7 +481,8 @@ export function createJunctionDetail({
     if(reuseRollingForJunction(next))return;
     if(state.cache.has(key))return;
     if(state.inflight)return; // finishing request will schedule the next
-    const remaining=COOLDOWN_MS-(Date.now()-state.lastCall);
+    const remaining=Math.max(
+      COOLDOWN_MS-(Date.now()-state.lastCall),osmTransport.waitMs());
     if(remaining>0){
       // update() runs on every simulation frame; do NOT restart the
       // cooldown timer each time or the junction will never be fetched.
@@ -581,7 +570,8 @@ export function createJunctionDetail({
         data:reused,corridor:scan,throughGuidance:[]});
       onGuidanceChange();return;
     }
-    const cooldown=COOLDOWN_MS-(Date.now()-state.lastCall);
+    const cooldown=Math.max(
+      COOLDOWN_MS-(Date.now()-state.lastCall),osmTransport.waitMs());
     if(cooldown>0){
       if(state.rollingPendingTimer!==null)return;
       const generation=state.generation;
@@ -823,6 +813,7 @@ export function createJunctionDetail({
       requestStage:state.requestStage,
       lastOSMError:state.lastOSMError,
       cooldownRemainingMs:Math.max(0,COOLDOWN_MS-(Date.now()-state.lastCall)),
+      osmTransport:osmTransport.health(),
       lanePolygons:entry()?.data?.lanes?.features?.length||
         [...state.rollingCache.values()].reduce((n,r)=>
           n+(r.data?.lanes?.features?.length||0),0),

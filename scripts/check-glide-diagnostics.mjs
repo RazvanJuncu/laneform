@@ -22,6 +22,17 @@ const failed=evaluateGlideDiagnostics({...basic,
 assert.equal(failed.sections[1].status,'blocked');
 assert.match(failed.sections[1].reason,/429/);
 assert.equal(failed.scanner.failures.length,1);
+const parallelActivity=evaluateGlideDiagnostics({...basic,
+  targetCacheStatus:'unavailable',targetError:'Overpass HTTP 502',
+  requesting:true,requestStage:'rolling-download',
+  osmTransport:{source:'Private.coffee',consecutiveFailures:2,
+    pauseRemainingMs:120000}
+},context);
+assert.equal(parallelActivity.sections[1].status,'blocked',
+  'An existing failed junction must not appear pending due to rolling download');
+assert.equal(parallelActivity.sections[2].status,'blocked');
+assert.equal(parallelActivity.counters.osmProvider,'Private.coffee');
+assert.equal(parallelActivity.counters.osmProviderBackoffSeconds,120);
 const cooldown=evaluateGlideDiagnostics({...basic,
   guidanceMode:'cruise',targetOffsetMeters:null,
   distanceToTargetMeters:null,cooldownRemainingMs:12500,

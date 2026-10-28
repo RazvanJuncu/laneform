@@ -40,8 +40,8 @@ assert.ok(smallAreaOsmUrl([26.06,44.43],130).includes('bbox='),
 
 const detail=readFileSync(new URL('../src/junction-detail.js',import.meta.url),'utf8');
 const main=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
-assert.match(detail,/const url=smallAreaOverpassUrl\(position,radiusMeters\)/,
-  'Navigation downloads must use read-only OSM data access');
+assert.match(detail,/return osmTransport\.download\(position,radiusMeters\)/,
+  'Navigation must use the bounded multi-source read-only OSM transport');
 assert.match(main,/providerTurnLaneHud\(upcomingLaneGuidance\(/,
   'Only already-loaded TomTom lane guidance can be used as fallback');
 assert.match(main,/now-\(renderNavigationLaneHud\.lastAt\|\|0\)<220/,

@@ -24,17 +24,19 @@ export function smallAreaOsmUrl(center, radiusMeters=165){
 // Read-only OSM query provider. Overpass is intended for extracting map data;
 // the central OSM editing API should not be a continuous read source.
 // One small area per scheduled slot; no fallback cascade on HTTP 429/504.
-export function smallAreaOverpassUrl(center,radiusMeters=165){
+export function smallAreaOverpassQuery(center,radiusMeters=165){
   const bbox=new URL(smallAreaOsmUrl(center,radiusMeters))
     .searchParams.get('bbox').split(',').map(Number);
   const [west,south,east,north]=bbox;
   const box=[south,west,north,east].map(v=>v.toFixed(6)).join(',');
   // Only highway-tagged ways and THEIR referenced nodes are needed for
   // osm2streets. Avoid downloading unrelated buildings/POIs on every scan.
-  const query='[out:xml][timeout:14];'+
+  return '[out:xml][timeout:16];'+
     '(way["highway"]('+box+'););(._;>;);out body;';
+}
+export function smallAreaOverpassUrl(center,radiusMeters=165){
   return 'https://overpass-api.de/api/interpreter?data='+
-    encodeURIComponent(query);
+    encodeURIComponent(smallAreaOverpassQuery(center,radiusMeters));
 }
 export function validateOsmXML(xml){
   if(typeof xml!=='string'||!/<osm(?:\s|>)/i.test(xml.slice(0,1200)))

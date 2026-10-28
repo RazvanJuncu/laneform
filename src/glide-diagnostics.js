@@ -10,6 +10,8 @@ const safeError=value=>String(value||'unknown')
 export function evaluateGlideDiagnostics(info={},context={}){
  const route=!!context.routeActive,phase=info.guidanceMode||'cruise';
  const rolling=info.rollingCoverage||{},cruise=info.cruiseGuidance;
+ const osm=info.osmTransport||{};
+ const sourcePause=Number.isFinite(osm.pauseRemainingMs)?Math.ceil(osm.pauseRemainingMs/1000):0;
  const cooldown=finite(info.cooldownRemainingMs)?Math.ceil(Math.max(0,info.cooldownRemainingMs)/1000):0;
  const playbackRate=finite(context.playbackRate)?context.playbackRate:1;
  const travelDuringCooldown=cooldown*12.5*playbackRate;
@@ -30,6 +32,7 @@ export function evaluateGlideDiagnostics(info={},context={}){
   :cruise.mode==='available'?'Mapped lane count only; no route-valid lane is established.'
   :'Mapped lanes present, but no reliable selection established.';}
  else if(info.requesting){cs='pending';cw='OSM download or reconstruction currently running.';}
+ else if(sourcePause&&!hasGeometry){cs='waiting';cw='OSM sources resting after repeated errors: '+sourcePause+'s remaining.';}
  else if(fail&&!ready){cs='blocked';cw='Rolling OSM window failed: '+safeError(fail.message);}
  else if(cooldown&&!hasGeometry){cs='waiting';cw='OSM request cooldown: '+cooldown+'s remaining.';}
  else if(!hasGeometry){cs='no-coverage';cw=(rolling.requestedStations||0)===0
@@ -47,9 +50,10 @@ export function evaluateGlideDiagnostics(info={},context={}){
      ' away. Dedicated OSM prefetch is intentionally deferred until '+
      (info.junctionPrefetchLookaheadMeters||850)+' m; rolling Cruise owns the intervening road.';
  }
- else if(!info.ready){js=info.requesting?'pending':info.targetCacheStatus==='unavailable'?'blocked':'waiting';
+ else if(!info.ready){js=info.targetCacheStatus==='unavailable'?'blocked':info.requestStage==='junction-download'||info.requestStage==='junction-reconstruct'?'pending':'waiting';
   jw=info.targetCacheStatus==='unavailable'?'OSM reconstruction failed: '+safeError(info.targetError||info.reason||'unknown')
-   :info.requesting?'Next junction OSM geometry is loading.'
+   :info.requestStage==='junction-download'||info.requestStage==='junction-reconstruct'?'Next junction OSM geometry is loading.'
+   :sourcePause?'OSM sources resting for '+sourcePause+'s after errors.'
    :cooldown?'Junction request queued for '+cooldown+'s. At the current simulation playback rate the vehicle may travel '+dist(travelDuringCooldown)+' before a new request can begin.':'Next junction is not reconstructed yet.';}
  else if(info.dismissedPreview){js='dismissed';jw='Junction preview manually dismissed for this target.';}
  else if(info.distanceToTargetMeters>380&&!info.forcedPreview){js='ahead';jw='Next junction '+dist(info.distanceToTargetMeters)+' away; auto preview begins at 380 m.';}
@@ -63,7 +67,7 @@ export function evaluateGlideDiagnostics(info={},context={}){
     ?'OSM mapped approach lane selection; geometric reconstruction is provisional.'
     :'TomTom route lane recommendation is available without another API request.';
  }
- else if(!info.ready){ls='waiting';lw='Waiting for mapped junction lane geometry.';}
+ else if(!info.ready){ls=info.targetCacheStatus==='unavailable'?'blocked':'waiting';lw=info.targetCacheStatus==='unavailable'?'OSM geometry unavailable for this junction; follow the road-level maneuver.':sourcePause?'OSM provider backoff active; lane geometry unavailable.':'Waiting for mapped junction lane geometry.';}
  else if(info.corridorStatus!=='provisional'){ls='blocked';lw='Lane corridor failed: '+(info.corridorReason||'insufficient OSM metadata');}
  else {ls='insufficient';lw='Corridor exists but no supported 2+ lane recommendation was produced.';}
  const counters={
@@ -92,7 +96,9 @@ export function evaluateGlideDiagnostics(info={},context={}){
   activeStation:dist(station),cooldownSeconds:cooldown,
   playbackRate:playbackRate+'×',
   estimatedTravelDuringCooldown:dist(travelDuringCooldown),
-  currentRequest:info.requestStage||'idle',zoom:finite(info.zoom)?Number(info.zoom.toFixed(1)):null
+  currentRequest:info.requestStage||'idle',zoom:finite(info.zoom)?Number(info.zoom.toFixed(1)):null,
+  osmProvider:osm.source||'unknown',osmProviderFailures:osm.consecutiveFailures||0,
+  osmProviderBackoffSeconds:sourcePause
  };
  return {version:context.version||'unknown',
   recordedAt:new Date(context.now||Date.now()).toISOString(),
@@ -103,6 +109,7 @@ export function evaluateGlideDiagnostics(info={},context={}){
    {key:'lanes',title:'Suggested lanes',status:ls,reason:lw}
   ],counters,
   scanner:{stage:info.requestStage||'idle',lastError:info.lastOSMError?safeError(info.lastOSMError):null,
+   source:osm.source||'unknown',backoffSeconds:sourcePause,
    failures:(rolling.failures||[]).slice(0,4).map(x=>({
     station:dist(x.offset),error:safeError(x.message)
    })),
