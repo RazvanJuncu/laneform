@@ -187,7 +187,8 @@ export function createJunctionDetail({
     pendingTimer:null,rollingPendingTimer:null,rollingCache:new Map(),
     rollingAttempts:0,rollingLastStation:null,
     requestStage:'idle',lastOSMError:null,
-    reusedJunctions:0,lastReusedStation:null
+    reusedJunctions:0,lastReusedStation:null,
+    rejectedAreaReuses:new Set()
   };
   const map=()=>mapGetter?.();
   const button=()=>buttonGetter?.();
@@ -365,6 +366,8 @@ export function createJunctionDetail({
       routeProfile,positionAtDistance
     });
     for(const area of areas){
+      const attemptKey=key+'|'+area.station;
+      if(state.rejectedAreaReuses.has(attemptKey))continue;
       const reused={data:area.value.data,status:'ready',
         reusedFromRollingStation:area.station};
       try{
@@ -372,8 +375,10 @@ export function createJunctionDetail({
         // A 190m map window can include ways from slightly beyond its
         // bounding box, but only trust them if BOTH incoming and outgoing
         // route lane sections really exist around this junction.
-        if(!reconstructedJunctionCovered(reused.corridor,next.offset))
+        if(!reconstructedJunctionCovered(reused.corridor,next.offset)){
+          state.rejectedAreaReuses.add(attemptKey);
           continue;
+        }
         state.cache.set(key,reused);
         if(state.cache.size>MAX_CACHE)
           state.cache.delete(state.cache.keys().next().value);
@@ -385,6 +390,7 @@ export function createJunctionDetail({
         onGuidanceChange();
         return true;
       }catch(error){
+        state.rejectedAreaReuses.add(attemptKey);
         console.info('Glide cached OSM area cannot cover this junction:',
           error?.message);
       }
@@ -665,6 +671,7 @@ export function createJunctionDetail({
     state.rollingAttempts=0;state.rollingLastStation=null;
     state.requestStage='idle';state.lastOSMError=null;
     state.reusedJunctions=0;state.lastReusedStation=null;
+    state.rejectedAreaReuses.clear();
     show(map(),false);
     update(0);
   }
@@ -676,6 +683,7 @@ export function createJunctionDetail({
     state.inflight=false;clearRollingPending();
     state.rollingCache.clear();state.rollingLastStation=null;
     state.requestStage='idle';state.lastOSMError=null;
+    state.rejectedAreaReuses.clear();
     show(map(),false);updateButton();
   }
   function toggle(){
