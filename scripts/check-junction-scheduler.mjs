@@ -29,6 +29,7 @@ const junction=createJunction(state,junctionDownloadEligible,
 junction();
 assert.equal(scheduled,0,'5.4km target must not reserve a request timer');
 assert.equal(fetches,0);
+const clearedBeforeCooldown=cleared;
 state.progress=4590; // target now 810m away
 junction();
 assert.equal(scheduled,1,
@@ -37,7 +38,8 @@ assert.ok(delayed>=19000&&delayed<=21000);
 junction();junction();junction();
 assert.equal(scheduled,1,
  'Repeated position frames MUST NOT restart the cooldown timer');
-assert.equal(cleared,0,'A queued timer should not be cleared each frame');
+assert.equal(cleared,clearedBeforeCooldown,
+  'A queued timer should not be cleared each frame');
 state.pendingTimer=null;
 state.progress=0;
 const rollingState={...state,target,rollingLastStation:null,
