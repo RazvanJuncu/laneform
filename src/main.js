@@ -8,6 +8,7 @@ import { extractRouteLaneGuidance, upcomingLaneGuidance } from './lane-assist.js
 import { nextManeuverState, arrivalApproachText } from './maneuver-guidance.js';
 import {DEFAULT_SIM_RATE,simulationPlaybackRate,
   simulationMetersPerSecond,simulationSpeedLabel} from './simulation-speed.js';
+import {evaluateGlideDiagnostics,diagnosticsText} from './glide-diagnostics.js';
 
 import { deriveOsmLaneRecords } from './osm-lane-geometry.js';
 import { laneEventsFromCorridor, buildLaneTimeline }
@@ -126,9 +127,78 @@ function saveKey() {
   $('settingsPanel').hidden = true;
   toast('Routing key saved for this browser tab.');
 }
-function showSettings() {
-  $('settingsPanel').hidden = false;
-  $('apiKey').focus();
+let diagnosticsLastRender=0;
+let diagnosticsSnapshot=null;
+function diagnosticsOpen(){
+  return !$('settingsPanel').hidden&&
+    !$('diagnosticsContent').hidden;
+}
+function diagnosticSnapshotNow(){
+  const route=selectedRoute();
+  return evaluateGlideDiagnostics(junctionDetail?.info()||{},{
+    routeActive:state.mode==='navigation'&&state.sim.active,
+    simPlaying:state.sim.playing,
+    routeLengthMeters:route?.properties?.summary?.lengthInMeters,
+    version:GLIDE_BUILD_SHA.slice(0,7)
+  });
+}
+function renderDiagnostics(force=false){
+  if(!diagnosticsOpen())return;
+  const now=Date.now();
+  if(!force&&now-diagnosticsLastRender<900)return;
+  diagnosticsLastRender=now;
+  const snapshot=diagnosticSnapshotNow();
+  diagnosticsSnapshot=snapshot;
+  $('diagnosticsSummary').textContent=
+    'Build '+snapshot.version+' · '+snapshot.simulation+
+    ' · '+(snapshot.phase==='junction'?'Junction mode':'Cruise mode');
+  const rows=$('diagnosticsSections');
+  rows.replaceChildren();
+  for(const entry of snapshot.sections){
+    const item=document.createElement('section');
+    item.className='diagnostics-item';
+    const header=document.createElement('div');
+    header.className='diagnostics-item-head';
+    const title=document.createElement('strong');
+    title.textContent=entry.title;
+    const badge=document.createElement('span');
+    badge.className='diagnostics-status diagnostics-'+entry.status;
+    badge.textContent=entry.status.replaceAll('-',' ');
+    header.append(title,badge);
+    const reason=document.createElement('p');
+    reason.textContent=entry.reason;
+    item.append(header,reason);rows.append(item);
+  }
+  const metrics=$('diagnosticsCounters');
+  metrics.replaceChildren();
+  for(const [key,value] of Object.entries(snapshot.counters)){
+    const dt=document.createElement('dt'),dd=document.createElement('dd');
+    dt.textContent=key.replace(/([A-Z])/g,' $1').replace(/^./,c=>c.toUpperCase());
+    dd.textContent=value===null?'—':String(value);
+    metrics.append(dt,dd);
+  }
+  const scanner=snapshot.scanner;
+  $('diagnosticsScanner').textContent=
+    'OSM stage: '+scanner.stage+
+    (scanner.lastError?' · Last error: '+scanner.lastError:'')+
+    (scanner.failures.length
+      ?' · Rolling failures: '+scanner.failures.map(e=>
+          e.station+' ('+e.error+')').join('; ')
+      :'');
+}
+function showSettings(tab='preferences'){
+  $('settingsPanel').hidden=false;
+  const diagnostic=tab==='diagnostics';
+  $('preferencesContent').hidden=diagnostic;
+  $('diagnosticsContent').hidden=!diagnostic;
+  $('preferencesTab').setAttribute('aria-selected',String(!diagnostic));
+  $('diagnosticsTab').setAttribute('aria-selected',String(diagnostic));
+  $('preferencesTab').tabIndex=diagnostic?-1:0;
+  $('diagnosticsTab').tabIndex=diagnostic?0:-1;
+  if(diagnostic){
+    renderDiagnostics(true);
+    $('diagnosticsTab').focus();
+  }else $('apiKey').focus();
 }
 function setMode(mode) {
   if (mode !== 'preview') closeRoutesTray();
@@ -1191,6 +1261,7 @@ function navHud(){
   // sample. Geometry readiness is asynchronous; only show known samples.
   junctionDetail?.update(offset);
   renderNavigationLaneHud();
+  renderDiagnostics(false);
 }
 function positionSim(meters,forceCamera=false){
   const sim=state.sim;
@@ -1308,6 +1379,23 @@ function attachEvents() {
     $('settingsPanel').hidden?showSettings():$('settingsPanel').hidden=true;
   });
   $('settingsClose').addEventListener('click',()=>{$('settingsPanel').hidden=true;});
+  $('preferencesTab').addEventListener('click',()=>showSettings('preferences'));
+  $('diagnosticsTab').addEventListener('click',()=>showSettings('diagnostics'));
+  $('navDiagnostics').addEventListener('click',()=>showSettings('diagnostics'));
+  $('diagnosticsRefresh').addEventListener('click',()=>renderDiagnostics(true));
+  $('diagnosticsCopy').addEventListener('click',async()=>{
+    renderDiagnostics(true);
+    const report=diagnosticsText(diagnosticsSnapshot);
+    try{
+      await navigator.clipboard.writeText(report);
+      $('diagnosticsCopyStatus').textContent='Report copied.';
+    }catch{
+      $('diagnosticsCopyStatus').textContent=
+        'Copy blocked by browser permissions. Run glideDiagnosticsReport() in DevTools.';
+    }
+  });
+  // Read-only UI refresh; no additional API calls or map reconstruction.
+  setInterval(()=>renderDiagnostics(false),1200);
   $('saveKey').addEventListener('click',saveKey);
   $('apiKey').addEventListener('keydown',event=>{if(event.key==='Enter')saveKey();});
   $('trafficToggle').addEventListener('change',()=>{
@@ -1337,6 +1425,7 @@ function attachEvents() {
       // Redraw the route canvas immediately, not just the compact HUD.
       requestDraw();
       if(state.sim.active)renderNavigationLaneHud();
+      renderDiagnostics(true);
     },
     onButtonAction:()=>{
       if(!state.sim.active)return;
@@ -1349,6 +1438,8 @@ function attachEvents() {
   // Non-sensitive geometry diagnostics for testing Junction Detail.
   // Inspect in the browser console: glideJunctionInfo()
   window.glideJunctionInfo=()=>junctionDetail?.info()||null;
+  window.glideDiagnostics=()=>diagnosticSnapshotNow();
+  window.glideDiagnosticsReport=()=>diagnosticsText(diagnosticSnapshotNow());
   $('backToPlanning').addEventListener('click',()=>{
     // Keep the calculated route in memory, but hide it during a new search.
     state.routeMarkers.forEach(x=>x.getElement().style.display='none');
