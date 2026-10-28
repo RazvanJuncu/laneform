@@ -15,6 +15,8 @@ import {cruiseFromLaneContinuity,cruiseFromAvailableLanes}
   from './lane-cruise-continuity.js';
 import {nextRollingStation,rollingAreaPoint,ROLLING_AREA_RADIUS_METERS}
   from './cruise-rolling-window.js';
+import {reusableAreaCandidates,reconstructedJunctionCovered}
+  from './osm-area-reuse.js';
 import {routeProfile,positionAtDistance} from './osm-lane-geometry.js';
 import {sampleImportantThroughJunctions}
   from './junction-straight-sampling.js';
@@ -184,7 +186,8 @@ export function createJunctionDetail({
     progress:0,route:null,reason:'not-requested',userZooming:false,
     pendingTimer:null,rollingPendingTimer:null,rollingCache:new Map(),
     rollingAttempts:0,rollingLastStation:null,
-    requestStage:'idle',lastOSMError:null
+    requestStage:'idle',lastOSMError:null,
+    reusedJunctions:0,lastReusedStation:null
   };
   const map=()=>mapGetter?.();
   const button=()=>buttonGetter?.();
@@ -353,6 +356,41 @@ export function createJunctionDetail({
       })
     }));
   }
+  function reuseRollingForJunction(next=state.target){
+    if(!next||!state.route)return false;
+    const key=junctionCacheKey(next.position);
+    if(state.cache.get(key)?.data)return true;
+    const areas=reusableAreaCandidates({
+      route:state.route,target:next,rollingCache:state.rollingCache,
+      routeProfile,positionAtDistance
+    });
+    for(const area of areas){
+      const reused={data:area.value.data,status:'ready',
+        reusedFromRollingStation:area.station};
+      try{
+        classifyTarget(next,reused);
+        // A 190m map window can include ways from slightly beyond its
+        // bounding box, but only trust them if BOTH incoming and outgoing
+        // route lane sections really exist around this junction.
+        if(!reconstructedJunctionCovered(reused.corridor,next.offset))
+          continue;
+        state.cache.set(key,reused);
+        if(state.cache.size>MAX_CACHE)
+          state.cache.delete(state.cache.keys().next().value);
+        state.reusedJunctions++;
+        state.lastReusedStation=area.station;
+        state.reason='reused-rolling';
+        clearPending();
+        updateAppearance();
+        onGuidanceChange();
+        return true;
+      }catch(error){
+        console.info('Glide cached OSM area cannot cover this junction:',
+          error?.message);
+      }
+    }
+    return false;
+  }
   function updateButton(){
     const b=button();
     if(!b)return;
@@ -411,6 +449,9 @@ export function createJunctionDetail({
     const next=state.target;
     if(!next || !state.route)return;
     const key=junctionCacheKey(next.position);
+    // Highest priority: use geometry already fetched by Cruise. This is
+    // instant even during the 30s network cooldown and costs zero requests.
+    if(reuseRollingForJunction(next))return;
     if(state.cache.has(key))return;
     if(state.inflight)return; // finishing request will schedule the next
     const remaining=COOLDOWN_MS-(Date.now()-state.lastCall);
@@ -536,6 +577,9 @@ export function createJunctionDetail({
         }));
         state.rollingCache.set(station,{
           data,corridor,throughGuidance:crosses});
+        // The new rolling map may already encompass a routed junction
+        // for which the dedicated OSM request is still in cooldown.
+        reuseRollingForJunction();
         state.lastOSMError=null;
       }catch(error){
         if(generation!==state.generation)return;
@@ -620,6 +664,7 @@ export function createJunctionDetail({
     clearRollingPending();state.rollingCache.clear();
     state.rollingAttempts=0;state.rollingLastStation=null;
     state.requestStage='idle';state.lastOSMError=null;
+    state.reusedJunctions=0;state.lastReusedStation=null;
     show(map(),false);
     update(0);
   }
@@ -712,6 +757,10 @@ export function createJunctionDetail({
       targetCount:state.targets.length,
       ready:!!entry()?.data,
       targetCacheStatus:entry()?.status||'not-cached',
+      geometrySource:entry()?.reusedFromRollingStation!=null
+        ?'cruise-cache':'junction-download',
+      reusedJunctions:state.reusedJunctions,
+      reusedFromStation:entry()?.reusedFromRollingStation??null,
       targetError:entry()?.error||null,
       requestStage:state.requestStage,
       lastOSMError:state.lastOSMError,
