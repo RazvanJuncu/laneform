@@ -14,8 +14,12 @@ assert.equal(early.exit,null,
   'Exit lane information must not appear too early');
 const near=twoStageLaneGuidance(lane(3,1),lane(2,0),88);
 assert.deepEqual(near.selected,[1]);
-assert.deepEqual(near.exit.selected,[0],
-  'Use distinct mapped approach and destination lane choices');
+assert.equal(near.exit,null,
+  'Mapped exit lanes alone do not establish lane-to-lane connections');
+const linked=twoStageLaneGuidance(lane(3,1),
+  {...lane(2,0),explicitLaneConnection:true},88);
+assert.deepEqual(linked.exit.selected,[0],
+  'Display an exit lane only with an explicitly mapped lane connector');
 assert.equal(twoStageLaneGuidance(lane(3,1),lane(2,0),-40),null);
 assert.equal(twoStageLaneGuidance(lane(3,1),null,70).exit,null);
 const mappedExpansion=lane(2,0);
