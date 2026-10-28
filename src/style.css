@@ -224,7 +224,8 @@ body[data-mode="idle"] .map-fab,body[data-mode="search"] .map-fab{bottom:110px}
 body[data-mode="preview"] .map-fab{bottom:235px}
 body[data-mode="navigation"] .map-fab{bottom:218px}
 
-.settings-panel{top:75px;right:19px;z-index:10;width:min(350px,calc(100vw - 38px));padding:20px}
+.settings-panel{top:75px;right:19px;z-index:10;width:min(430px,calc(100vw - 38px));padding:20px;
+  max-height:min(760px,calc(100dvh - 95px));overflow-y:auto;overscroll-behavior:contain}
 .settings-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
 .settings-head strong{font-weight:600;font-size:15px}
 .settings-head .bare-icon{font-size:23px;min-height:36px;min-width:36px}
@@ -238,6 +239,45 @@ body[data-mode="navigation"] .map-fab{bottom:218px}
 .settings-switch input{accent-color:#C7CDD2;width:17px;height:17px}
 .developer-details{border-top:1px solid var(--hairline);color:#83909A;font-size:11px;padding-top:12px}
 .developer-details summary{cursor:pointer}.developer-details p{line-height:1.5}
+/* Read-only diagnostic tab; compact cards rather than a console dump. */
+.settings-tabs{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+.settings-tabs button{border:0;border-bottom:2px solid transparent;
+  color:#8F9DA6;background:transparent;font-size:12px;
+  padding:8px 9px;font-weight:600;cursor:pointer}
+.settings-tabs button[aria-selected="true"]{border-bottom-color:#C8EAE1;color:#E7F2EF}
+.settings-tabs button:focus-visible,.diagnostics-footer button:focus-visible{
+  outline:2px solid #D3EBE4;outline-offset:2px}
+#preferencesContent[hidden],#diagnosticsContent[hidden]{display:none}
+.diagnostics-content{display:flex;flex-direction:column;gap:12px}
+.diagnostics-intro,.diagnostics-privacy{font-size:11px;line-height:1.55;color:#92A3AC;margin:0}
+.diagnostics-privacy{font-size:10px}
+.diagnostics-summary{padding:10px 12px;background:#162026;color:#C9D8DB;
+  border:1px solid #27363B;border-radius:8px;font-size:11px;
+  font-variant-numeric:tabular-nums}
+.diagnostics-sections{display:grid;gap:8px}
+.diagnostics-item{border:1px solid #26333A;background:#11191E;border-radius:9px;padding:12px}
+.diagnostics-item-head{display:flex;gap:12px;justify-content:space-between;align-items:center}
+.diagnostics-item strong{color:#DCE6E9;font-size:12px;font-weight:600}
+.diagnostics-item p{font-size:11px;color:#A6BAC0;line-height:1.5;margin:8px 0 0}
+.diagnostics-status{color:#ADBDC5;background:#29343B;border-radius:999px;
+  padding:4px 8px;font-size:9px;text-transform:uppercase;letter-spacing:.035em}
+.diagnostics-ready,.diagnostics-visible{color:#BDEADD;background:#253A37}
+.diagnostics-blocked,.diagnostics-no-coverage{color:#EBC1AC;background:#46352D}
+.diagnostics-pending,.diagnostics-waiting{color:#CFDBEA;background:#2A3948}
+.diagnostics-technical{border:1px solid #26343B;border-radius:8px;padding:12px}
+.diagnostics-technical summary{font-size:11px;font-weight:600;color:#C6D9DC;cursor:pointer}
+.diagnostics-counters{display:grid;grid-template-columns:1fr auto;gap:6px 12px;
+  font-size:10px;margin:12px 0;color:#A4B5BD}
+.diagnostics-counters dt{overflow-wrap:anywhere}
+.diagnostics-counters dd{color:#E0ECEE;font-variant-numeric:tabular-nums;
+  margin:0;text-align:right}
+.diagnostics-scan{font-size:10px;line-height:1.5;color:#9DB4BC;overflow-wrap:anywhere;margin:0}
+.diagnostics-footer{display:flex;gap:10px}
+.diagnostics-footer button{background:#242F36;color:#DBE9ED;
+  border:1px solid #394850;border-radius:7px;min-height:38px;padding:0 12px;
+  font-size:11px;cursor:pointer}
+.diagnostics-footer button:last-child{background:#CDE8E2;color:#1A292B;font-weight:650}
+.diagnostics-copy-state{font-size:10px;margin:0;color:#C1E7DD;min-height:1em}
 
 .toast{z-index:12;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
   max-width:min(550px,calc(100vw - 32px));padding:12px 15px;color:#D9E0E4;
