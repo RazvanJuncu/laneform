@@ -9,6 +9,11 @@ export function providerTurnLaneHud(guidance){
      !Number.isFinite(guidance.distanceToManeuver)||
      guidance.distanceToManeuver<12||
      guidance.distanceToManeuver>380)return null;
+  // Do not silently discard contradictory provider lane flags: treating
+  // an invalid recommendation as a valid neighboring lane is misleading.
+  if(guidance.lanes.some(lane=>lane?.recommended&&
+    (!lane.follow||!Array.isArray(lane.directions)||
+      !lane.directions.includes(lane.follow))))return null;
   const selected=guidance.lanes.flatMap((lane,index)=>
     lane.recommended&&lane.follow&&
       Array.isArray(lane.directions)&&lane.directions.includes(lane.follow)
