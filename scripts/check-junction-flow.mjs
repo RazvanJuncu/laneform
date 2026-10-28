@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {buildJunctionTargets,upcomingJunction,junctionViewMode,junctionCacheKey}
+import {buildJunctionTargets,upcomingJunction,junctionViewMode,junctionCacheKey,
+ isPreviewManeuver}
  from '../src/junction-logic.js';
 import {smallAreaOsmUrl} from '../src/street-geometry-adapter.js';
 const main=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
@@ -17,6 +18,41 @@ const route={
       routeOffsetInMeters:1372,message:'You have reached your destination'}
   ]}}
 };
+// A multi-kilometre straight stretch must not contain phantom previews.
+for(const instruction of [
+  {maneuver:'CONTINUE',message:'Continue straight'},
+  {maneuver:'FOLLOW',message:'Follow the road'},
+  {instructionType:'DIRECTION_INFO',message:'Proceed along the road'},
+  {instructionType:'TURN',message:'Go straight'},
+  {maneuver:'UNKNOWN',message:'Road name changes'}
+])assert.equal(isPreviewManeuver(instruction),false,
+  'Generic instruction must never be promoted into a junction target');
+for(const instruction of [
+  {maneuver:'TURN_LEFT',message:'Turn left'},
+  {maneuver:'KEEP_RIGHT',message:'Keep right toward airport'},
+  {maneuver:'ENTER_ROUNDABOUT',message:'Enter roundabout'},
+  {instructionType:'DIRECTION_INFO',message:'Bear right at the fork'}
+])assert.equal(isPreviewManeuver(instruction),true,
+  'Real maneuvers must retain focused preview');
+const longRoute={
+  geometry:{type:'LineString',coordinates:[[26,44.43],[26.20,44.43]]},
+  properties:{summary:{lengthInMeters:14944},guidance:{instructions:[
+    {maneuver:'CONTINUE',routeOffsetInMeters:9199,
+      message:'Continue straight'},
+    {instructionType:'DIRECTION_INFO',routeOffsetInMeters:9250,
+      message:'Proceed along the road'},
+    {maneuver:'KEEP_RIGHT',routeOffsetInMeters:13914,
+      message:'Keep right toward Henri Coandă'},
+    {maneuver:'ARRIVE',routeOffsetInMeters:14944,
+      instructionType:'LOCATION_ARRIVAL'}
+  ]}}
+};
+const longTargets=buildJunctionTargets(longRoute);
+assert.equal(longTargets.length,1,
+  'No junction target at straight crossing 38m away');
+assert.equal(longTargets[0].offset,13914);
+assert.ok(longTargets[0].offset-9161>4700,
+  'Straight at route progress 9161m has only the distant real turn');
 const junctions=buildJunctionTargets(route);
 assert.equal(junctions.length,2,'Exclude arrival and identify consecutive junctions');
 assert.ok(junctions[0].position[0]>13.003);
