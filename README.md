@@ -307,19 +307,20 @@ choice or a credible upcoming widening. There is no Cruise display on a
 single-lane road with no upcoming lane choice, and no persistent
 `Monitoring` placeholder when lane geometry is unavailable.
 
-Cruise has **separate evidence levels**. First it uses existing
-reconstructed OSM `allowed_turns` markings at nearby straight-through
-junctions (within a 360m horizon). If the same mapped directional road has
-both explicitly through-capable and turn-only lanes, it highlights a
-through-capable lane and can consider the next routed turn when multiple
-choices exist. If those tags are missing, it does **not** guess a turn-only
-restriction. Instead, when the already visible reconstructed approach lane
-corridor is supported by several samples and has 2+ lanes, it can show a
-muted `Align for next turn` suggestion 170–600m ahead, using that
-corridor's exact selected lane. This is only a geometric preview of a
-routed turn, **not** a promise that the lane stays through preceding
-junctions. Both modes remain inferred; GPS does not detect the user's lane.
-Where neither evidence level exists, it remains neutral.
+Cruise has **separate evidence levels**. Explicit reconstructed OSM
+`allowed_turns` markings at nearby straight-through junctions take
+precedence. When they identify through-capable and turn-only lanes, Glide
+shows one or two allowed through lanes, accounting for the next routed
+turn. Next is longitudinal **lane-continuity** analysis (e.g. a mapped
+3 → 2 split with a unique retained-lane match). When neither establishes
+a selection, the route-specific geometric `Align for next turn` cue
+may be shown 170–600 m before a turn. Finally, repeatedly reconstructed
+multi-lane groups provide a **heuristic** Cruise suggestion with explicit
+`inferred` wording. This final level does not know which lanes are
+turn-only or safe through future intersections; it is simply a
+driver-style preference and does not override road signs or markings.
+GPS cannot tell the driver's occupied lane. Where no stable 2+ lane
+group exists, Cruise is absent.
 
 The crossing detector now accepts actual osm2streets movement IDs that may
 contain prefixes or formatting, instead of only bare numeric IDs; the
