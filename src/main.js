@@ -139,6 +139,7 @@ function diagnosticSnapshotNow(){
     routeActive:state.mode==='navigation'&&state.sim.active,
     simPlaying:state.sim.playing,
     routeLengthMeters:route?.properties?.summary?.lengthInMeters,
+    playbackRate:state.sim.playbackRate,
     version:GLIDE_BUILD_SHA.slice(0,7)
   });
 }
