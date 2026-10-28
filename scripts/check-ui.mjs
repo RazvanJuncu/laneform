@@ -108,9 +108,10 @@ assert.ok(!js.includes('    startOsmLaneLookup();') &&
   js.includes("buildLaneTimeline("),
   'Navigation must prepare one junction and avoid automatic corridor-wide OSM requests');
 assert.ok(js.includes("laneData?.source!=='glide'") &&
-  js.includes("laneData.status!=='inferred'") &&
-  js.includes("'Glide (inferred)'"),
-  'Glide HUD must show only provisional lane choices from the reconstructed map trajectory');
+  js.includes("laneData?.status!=='inferred'") &&
+  js.includes("'Glide (inferred)'") &&
+  js.includes("'TomTom route guidance'"),
+  'Distinguish provisional OSM lanes from cached TomTom route recommendations');
 assert.ok(html.includes('small OpenStreetMap extract') &&
   html.includes('reconstructs geometry locally'),
   'The navigator must describe the optional junction data source');
@@ -123,8 +124,8 @@ assert.ok(js.includes("state.osmCoverageMeters") &&
   'OSM route coverage must stay visible and the lane HUD must use Junction Detail selections');
 assert.ok(js.includes("nextManeuverState(instructions,offset,realLength)") &&
   js.includes("junctionDetail?.update(offset)") &&
-  js.includes("renderLaneAssistance(junctionDetail?.suggestedLanes(),"),
-  'Route maneuvers and the geometry planner must advance together, without an independent HUD lane engine');
+  js.includes("renderLaneAssistance(osmLanes||provider,"),
+  'Route maneuvers must advance with the geometry planner while allowing cached provider fallback');
 console.log('Glide route-ordered lane guidance regression wiring passed.');
 assert.ok(existing.has('junctionToggle') &&
   js.includes("buttonGetter:()=>$('junctionToggle')"),
