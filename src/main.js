@@ -1171,24 +1171,34 @@ function renderCruiseGuidance(cue){
   panel.append(name);
   const note=document.createElement('span');
   note.className='cruise-status';
-  note.textContent=(cue.mode==='alignment'
+  const distanceText=distance(Math.max(0,cue.distanceToJunction));
+  if(cue.mode==='available'){
+    // This oval is a low-confidence DRIVING PREFERENCE, not proof a
+    // particular lane remains legally available through an intersection.
+    const side=cue.preferredSide==='left'?'left':'right';
+    const upcoming=cue.timing==='upcoming';
+    note.textContent=upcoming
+      ?'After widening · prefer '+side+' · '+distanceText
+      :cue.preferredSide==='left'
+        ?'Prefer left · inferred':'Keep right · inferred';
+  }else{
+    note.textContent=(cue.mode==='alignment'
       ?'Align for next turn · '
       :cue.mode==='continuity'
         ?cue.upcomingLaneCount?'Road widens · ':'Lane peels away · '
-        :cue.mode==='available'
-          ?cue.distanceToJunction>15?'More lanes ahead · ':'Lanes available · '
-          :'Keep through · ')+
-    (cue.mode==='available'?cue.laneCount+' lanes · ':'')+
-    distance(Math.max(0,cue.distanceToJunction))+' ahead';
+        :'Keep through · ')+distanceText+' ahead';
+  }
   const rail=document.createElement('div');
   rail.className='cruise-rail';
   rail.setAttribute('role','img');
+  const selectedText=cue.selected.length
+    ?'suggested '+(cue.selected.length===1?'lane ':'lanes ')+
+      cue.selected.map(i=>i+1).join(' and ')
+    :'no preferred lane';
   rail.setAttribute('aria-label',
-    cue.laneCount+' mapped lanes; suggested lane '+
-    (cue.selected.length?'suggested lane '+(cue.selected[0]+1):
-      'no preferred lane')+
+    cue.laneCount+' mapped lanes; '+selectedText+
     (cue.mode==='available'
-      ?' (mapped lane count only, no confirmed choice).'
+      ?' (heuristic preference only; not verified through access).'
       :cue.mode==='alignment'
         ?' (geometric alignment only, earlier turn restrictions unknown).'
         :cue.mode==='continuity'
@@ -1204,7 +1214,8 @@ function renderCruiseGuidance(cue){
   }
   panel.append(note,rail);
   panel.title=cue.mode==='available'
-    ?'Multiple mapped lanes ahead, but no defensible preferred lane yet.'
+    ?'Inferred driver-style '+(cue.preferredSide||'right')+
+      ' lane preference, not verified lane continuity or legal turn access.'
     :cue.mode==='alignment'
       ?'Geometric lane alignment for the next routed turn. No turn-only restrictions verified.'
       :cue.mode==='continuity'
