@@ -34,6 +34,12 @@ const cruise=evaluateGlideDiagnostics({...basic,
     source:'glide',mode:'continuity',laneCount:3,selected:[1]
   }},context);
 assert.equal(cruise.sections[0].status,'ready');
+const neutral=evaluateGlideDiagnostics({...basic,
+  guidanceMode:'cruise',cruiseGuidance:{
+    source:'glide',mode:'available',laneCount:3,selected:[]
+  }},context);
+assert.equal(neutral.sections[0].status,'insufficient',
+  'Geometry-only Cruise must not be reported as actionable lane guidance');
 const junctionReady=evaluateGlideDiagnostics({...basic,
   ready:true,active:true,corridorStatus:'provisional',
   hudGuidance:true,distanceToTargetMeters:80},context);
