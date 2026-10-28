@@ -48,17 +48,19 @@ assert.match(panel.title,/No turn-only restrictions verified/,
 assert.equal(panel.children[2].children.length,2);
 render({source:'glide',kind:'cruise',mode:'available',status:'inferred',
   confidence:'heuristic',timing:'current',preferredSide:'right',
-  laneCount:3,selected:[2],distanceToJunction:0});
-assert.match(panel.children[1].textContent,/Keep right · inferred/,
-  'Heuristic Cruise must visibly say that its suggestion is inferred');
-assert.ok(panel.children[2].children[2].className.includes('recommended'));
-assert.match(panel.title,/not verified lane continuity/,
-  'Do not present a default lane as verified route safety');
+  laneCount:3,selected:[],distanceToJunction:0});
+assert.match(panel.children[1].textContent,/Lanes mapped · no verified choice/,
+  'Geometry-only Cruise must not imply a legal driving preference');
+assert.ok(panel.children[2].children.every(item=>
+  !item.className.includes('recommended')));
+assert.match(panel.title,/no verified lane continuity/,
+  'Do not present mapped lane count as verified route safety');
 render({source:'glide',kind:'cruise',mode:'available',status:'inferred',
   confidence:'heuristic',timing:'upcoming',preferredSide:'left',
-  laneCount:2,selected:[0],distanceToJunction:85});
-assert.match(panel.children[1].textContent,/After widening · prefer left · 85 m/);
-assert.ok(panel.children[2].children[0].className.includes('recommended'));
+  laneCount:2,selected:[],distanceToJunction:85});
+assert.match(panel.children[1].textContent,/Lanes mapped ahead · choice unverified · 85 m/);
+assert.ok(panel.children[2].children.every(item=>
+  !item.className.includes('recommended')));
 render({source:'glide',kind:'cruise',mode:'turn-only',status:'inferred',
   laneCount:3,selected:[1,2],turnOnly:[0],distanceToJunction:110});
 assert.ok(panel.children[2].children[1].className.includes('recommended'));
