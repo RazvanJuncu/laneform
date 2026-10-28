@@ -21,7 +21,11 @@ export function twoStageLaneGuidance(
   if(!validLaneSelection(approach)||
     !Number.isFinite(distanceToManeuver)||
     distanceToManeuver<0||distanceToManeuver>700)return null;
-  const shown=validLaneSelection(exit)&&distanceToManeuver<=revealMeters;
+  // A mapped exit lane is not a verified approach-to-exit lane connector.
+  // Do not tell the driver to land in a particular exit lane unless the
+  // mapping explicitly establishes that correspondence.
+  const shown=validLaneSelection(exit)&&exit.explicitLaneConnection===true&&
+    distanceToManeuver<=revealMeters;
   // The early row describes the roadway BEFORE it widens. Closer to the
   // turn, switch to the actual mapped lane count in the final approach.
   // Don't advertise a dedicated turning lane hundreds of metres early.
@@ -41,16 +45,11 @@ export function twoStageLaneGuidance(
   const guidedApproach=defaultIndex!==null&&!hasMappedDirection
     ?{...selected,selected:[defaultIndex],
       selectionBasis:'driver-side-default'}:selected;
-  // The ordinary exit mapping has no explicit lane-to-lane connection;
-  // preserve a verified lane connector if one becomes available.
-  const guidedExit=validLaneSelection(exit)&&defaultIndex!==null&&
-    !exit.explicitLaneConnection
-    ?{...exit,selected:[selectedTurnSide==='left'?0:exit.laneCount-1],
-      selectionBasis:'driver-side-default'}:exit;
+  const guidedExit=shown?exit:null;
   // A 1->1 passage requires no lane decision. Suppress the whole HUD,
   // including boring straight-through crossings, unless a lane really
   // appears or the outgoing lane group has multiple choices.
-  const hasExitChoices=validLaneSelection(exit)&&exit.laneCount>1;
+  const hasExitChoices=shown&&exit.laneCount>1;
   if(approach.laneCount===1&&!widening&&!hasExitChoices)
     return null;
   // The '+' marks the NEWLY APPEARING lane, not necessarily the selected
