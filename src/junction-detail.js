@@ -761,6 +761,12 @@ export function createJunctionDetail({
         failures:[...state.rollingCache.entries()]
           .filter(([,value])=>!!value.error).map(([offset,value])=>({
             offset,message:String(value.error).slice(0,160)
+          })),
+        laneFramesPerStation:[...state.rollingCache.entries()]
+          .filter(([,value])=>!!value.data).map(([offset,value])=>({
+            offset,frames:value.corridor?.laneFrames?.length||0,
+            corridorStatus:value.corridor?.status||'unavailable',
+            throughCrossings:value.throughGuidance?.length||0
           }))
       },
       cruiseDiagnostics:{
@@ -771,6 +777,10 @@ export function createJunctionDetail({
         withThroughCorridor:entry()?.throughGuidance?.filter(t=>
           t.corridor?.status==='provisional'&&
           t.corridor?.recommendation).length||0,
+        rollingThroughCandidates:[...state.rollingCache.values()]
+          .reduce((sum,x)=>sum+(x.throughGuidance?.length||0),0),
+        rollingMappedLaneFrames:[...state.rollingCache.values()]
+          .reduce((sum,x)=>sum+(x.corridor?.laneFrames?.length||0),0),
         explicitTurnTagPolygons:entry()?.data?.lanes?.features?.filter(f=>
           Array.isArray(f?.properties?.allowed_turns)&&
           f.properties.allowed_turns.length>0).length||0,
