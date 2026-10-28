@@ -21,6 +21,9 @@ export function evaluateGlideDiagnostics(info={},context={}){
  let cs,cw,cn;
  if(!route){cs='inactive';cw='Start a route preview.';}
  else if(phase==='junction'){cs='suppressed';cw='Junction mode deliberately hides Cruise, even if Suggested Lanes is unavailable.';}
+ else if(cruise?.mode==='available'&&(!cruise.selected||!cruise.selected.length)){
+  cs='insufficient';cw='Mapped lane count only; no route-valid lane can be selected.';
+ }
  else if(cruise?.laneCount>1){cs='ready';cw=cruise.mode==='turn-only'?'Explicit OSM through/turn-only evidence.'
   :cruise.mode==='continuity'?'Mapped lane continuity shows a lane diverging.'
   :cruise.mode==='alignment'?'Inferred alignment for next routed turn.'
