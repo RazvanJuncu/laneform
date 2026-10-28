@@ -1,9 +1,22 @@
 import assert from 'node:assert/strict';
 import {nextRollingStation,rollingAreaPoint,
-  ROLLING_STEP_METERS,ROLLING_AREA_RADIUS_METERS}
+  ROLLING_STEP_METERS,ROLLING_AREA_RADIUS_METERS,
+  prioritizeJunctionDownload}
   from '../src/cruise-rolling-window.js';
 import {routeProfile,positionAtDistance}
   from '../src/osm-lane-geometry.js';
+assert.equal(prioritizeJunctionDownload({
+  aheadMeters:850,rollingStation:300,rollingCached:false
+}),false,'Nearby Cruise coverage should be loaded before a distant turn');
+assert.equal(prioritizeJunctionDownload({
+  aheadMeters:500,rollingStation:600,rollingCached:false
+}),true,'Imminent junctions take priority over optional rolling scans');
+assert.equal(prioritizeJunctionDownload({
+  aheadMeters:840,rollingStation:300,rollingCached:true
+}),true,'Once local geometry is cached, prefetch the distant junction');
+assert.equal(prioritizeJunctionDownload({
+  aheadMeters:840,rollingStation:null,rollingCached:false
+}),true,'With no rolling station there is no reason to delay a junction');
 assert.equal(ROLLING_STEP_METERS,300);
 assert.equal(ROLLING_AREA_RADIUS_METERS,190);
 assert.equal(nextRollingStation(0,2200),300);
