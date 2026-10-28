@@ -452,8 +452,9 @@ export function createJunctionDetail({
     if(state.inflight)return; // finishing request will schedule the next
     const remaining=COOLDOWN_MS-(Date.now()-state.lastCall);
     if(remaining>0){
-      clearPending();
-      // One scheduled follow-up for the next selected junction; no polling.
+      // update() runs on every simulation frame; do NOT restart the
+      // cooldown timer each time or the junction will never be fetched.
+      if(state.pendingTimer!==null)return;
       const generation=state.generation;
       state.pendingTimer=setTimeout(()=>{
         state.pendingTimer=null;
