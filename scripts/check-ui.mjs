@@ -82,11 +82,13 @@ assert.ok(js.includes('revealPreviewFromSearch(searchRect)'),
 assert.ok(js.includes("getInstructionLanes") &&
   js.includes("extractRouteLaneGuidance(route, getInstructionLanes)"),
   'Preserve route provider lane records for coverage diagnostics');
-assert.ok(js.includes("renderLaneAssistance(junctionDetail?.suggestedLanes(),") &&
+assert.ok(js.includes("const osmLanes=junctionDetail?.suggestedLanes();") &&
+  js.includes("const provider=osmLanes?null:cachedProviderTurnLanes();") &&
+  js.includes("renderLaneAssistance(osmLanes||provider,") &&
   js.includes("junctionDetail?.laneState()") &&
   js.includes("onGuidanceChange:()=>") &&
   !js.includes("renderLaneAssistance(laneData)"),
-  'The mini lane HUD must use exactly the lane selection painted by Junction Detail');
+  'The HUD must prioritize the painted OSM selection, then cached TomTom guidance');
 assert.ok(css.includes('.glide-lane-cell.recommended') &&
   css.includes('.lane-guidance[hidden]') &&
   !js.includes('LANE_ARROWS'),
