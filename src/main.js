@@ -184,6 +184,11 @@ function renderDiagnostics(force=false){
     (scanner.failures.length
       ?' · Rolling failures: '+scanner.failures.map(e=>
           e.station+' ('+e.error+')').join('; ')
+      :'')+
+    (scanner.stationEvidence?.length
+      ?' · Windows: '+scanner.stationEvidence.map(e=>
+          e.station+': '+e.frames+' lane frames / '+
+          e.crossings+' crossings ('+e.corridor+')').join('; ')
       :'');
 }
 function showSettings(tab='preferences'){
