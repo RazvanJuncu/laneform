@@ -18,7 +18,12 @@ export function isPreviewManeuver(instruction){
     return false;
   // True bends, forks, merges and roundabout entries still merit a
   // focused preview; do not depend on turn:lanes tagging for this.
-  return !!(code||type||message);
+  // Some providers emit generic instruction types/messages at ordinary
+  // through crossings. A non-empty field alone does not establish a turn.
+  const lateral=value=>
+    /(?:^|_)(?:TURN|LEFT|RIGHT|ROUNDABOUT|MERGE|FORK|KEEP|EXIT|RAMP|UTURN|REVERSE)(?:_|$)/.test(value);
+  if(lateral(code)||lateral(type))return true;
+  return /^(?:turn|bear|keep|merge|take (?:the )?(?:exit|ramp)|enter (?:the )?roundabout|at the roundabout|make a u[- ]turn|exit (?:the )?highway)\b/.test(message);
 }
 export function junctionDownloadEligible(target,progress,{
   lookaheadMeters=850,clearanceMeters=35
