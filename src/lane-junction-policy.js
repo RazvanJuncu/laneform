@@ -4,13 +4,14 @@
 export const JUNCTION_LEAD_METERS=380;
 export const JUNCTION_CLEARANCE_METERS=35;
 export function isJunctionPhase({
-  targetOffset=null,throughOffset=null,progress=0,
+  targetOffset=null,progress=0,
   lead=JUNCTION_LEAD_METERS,clearance=JUNCTION_CLEARANCE_METERS
 }={}){
   if(!Number.isFinite(progress))return false;
   const close=offset=>Number.isFinite(offset)&&
     offset-progress<=lead&&offset-progress>=-clearance;
-  return close(targetOffset)||close(throughOffset);
+  // Straight crossings belong to the rolling Cruise analysis only.
+  return close(targetOffset);
 }
 // Fallback when the chosen green corridor has usable multi-lane polygons
 // but the original lane ordinal is missing or unstable. Require repeated
