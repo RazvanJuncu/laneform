@@ -53,8 +53,18 @@ assert.equal(inactive.sections[0].status,'inactive');
 const exportText=diagnosticsText(failed);
 assert.match(exportText,/Intersection preview \[blocked\]/);
 assert.match(exportText,/abc1234/);
-for(const forbidden of ['sk-proj-','API key','26.','44.','destination']){
+for(const forbidden of ['sk-proj-secret12345','26.061234','44.429876','Private street address']){
   assert.ok(!exportText.includes(forbidden),
     'Sanitized diagnostics should not contain '+forbidden);
 }
+const sensitive=evaluateGlideDiagnostics({...basic,
+  targetCacheStatus:'unavailable',
+  targetError:'Failed to fetch https://example.com/?api_key=secret1234&lat=44.429876'
+},{...context});
+const privateExport=diagnosticsText(sensitive);
+assert.ok(!privateExport.includes('secret1234'),
+  'URLs and URL query credentials must be scrubbed');
+assert.ok(!privateExport.includes('44.429876'),
+  'Raw coordinate data must not be exposed');
+
 console.log('Glide diagnostics reasons, phase suppression and safe export passed.');
