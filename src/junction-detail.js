@@ -288,8 +288,11 @@ export function createJunctionDetail({
     }):null;
     if(alignment)return alignment;
     const available=batches.map(b=>cruiseFromAvailableLanes({
-      laneFrames:b.corridor?.laneFrames||[],progress:state.progress
+      laneFrames:b.corridor?.laneFrames||[],progress:state.progress,
+      nextTurnOffset:nearest?.offset??null,
+      nextTurnDirection:side
     })).filter(Boolean).sort((a,b)=>
+      (a.timing==='current'?0:1)-(b.timing==='current'?0:1)||
       a.distanceToJunction-b.distanceToJunction);
     return available[0]||null;
   }
