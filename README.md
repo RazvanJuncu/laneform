@@ -37,11 +37,14 @@ If needed, go to **Settings → Pages → Build and deployment**, select **GitHu
 
 Only **actionable route maneuvers** become Junction Detail targets.
 Provider `STRAIGHT`, `CONTINUE` and departure-style instructions no
-longer trigger the zoomed intersection preview or the misleading
+longer trigger the zoomed turn preview or misleading
 `Approach / After junction` square lane rows. Those crossing geometries
 remain available to **Cruise** to anticipate turn-only lane restrictions
-and lane-continuity changes. Ordinary street crossings do not need to
-hide Cruise as if the driver were turning.
+and lane-continuity changes. If a cached reconstructed crossing has a
+valid lane-level route corridor, the thin **green trajectory still paints
+through the straight crossing**, independent of large staged HUD and
+without opening a zoomed turn-preview. Ordinary street crossings do not
+need to hide Cruise as if the driver were turning.
 
 The next genuine routed turn can be shown by the ordinary nav bar from
 many kilometres away, but dedicated Junction Detail OSM downloading is
@@ -61,7 +64,9 @@ deferred, rather than misleadingly calling it `waiting`.
 
 Tests:
 `scripts/check-junction-request-priority.mjs`,
-`scripts/check-junction-scheduler.mjs`.
+`scripts/check-junction-scheduler.mjs`,
+`scripts/check-through-cruise-exclusivity.mjs` and
+`scripts/check-through-trajectory-visual.mjs`.
 
 ## Reusing OSM reconstruction before the cooldown
 
