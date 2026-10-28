@@ -10,15 +10,19 @@ export function isPreviewManeuver(instruction){
   const code=String(instruction.maneuver||'').toUpperCase();
   const type=String(instruction.instructionType||'').toUpperCase();
   const message=String(instruction.message||'').trim().toLowerCase();
-  // A straight-through crossing belongs to Cruise's lane-continuity
-  // lookahead, NOT an "approach + after junction" maneuver preview.
-  if(/STRAIGHT|CONTINUE|DEPART|START|FOLLOW|HEAD/.test(code))return false;
-  if(/DEPARTURE|START_OF_ROUTE/.test(type))return false;
-  if(/^continue (straight|ahead|on)\b|^go straight\b|^head (straight|north|south|east|west)\b/.test(message))
+  // Provider instruction codes can be generic or unknown. Treating any
+  // non-empty code/type/message as a turn causes straight crossings to open
+  // a two-stage junction HUD, sometimes kilometres before the next turn.
+  const straight=/^(?:continue (?:straight|ahead|on)\b|go straight\b|head (?:straight|north|south|east|west)\b|proceed (?:straight|ahead|on)\b|follow (?:the )?road\b)/;
+  if(straight.test(message))return false;
+  if(/(?:^|_)(?:STRAIGHT|CONTINUE|DEPART|START|FOLLOW|HEAD)(?:_|$)/.test(code)||
+    /(?:^|_)(?:DEPARTURE|START_OF_ROUTE|STRAIGHT|CONTINUE)(?:_|$)/.test(type))
     return false;
-  // True bends, forks, merges and roundabout entries still merit a
-  // focused preview; do not depend on turn:lanes tagging for this.
-  return !!(code||type||message);
+  // Focus only an actual lateral/roundabout maneuver. A generic provider
+  // instruction, road-name update, or unclassified intersection stays Cruise.
+  const lateral=/(?:^|_)(?:LEFT|RIGHT|TURN|KEEP|BEAR|FORK|MERGE|EXIT|RAMP|ROUNDABOUT|ROTARY|UTURN|REVERSE)(?:_|$)/;
+  if(lateral.test(code)||lateral.test(type))return true;
+  return /^(?:turn|bear|keep|merge|exit|take (?:the |an? )?(?:\w+ )?(?:exit|ramp)|enter (?:the )?roundabout|at (?:the )?roundabout|make a u[- ]turn|use (?:the )?roundabout)\b/.test(message);
 }
 export function junctionDownloadEligible(target,progress,{
   lookaheadMeters=850,clearanceMeters=35
