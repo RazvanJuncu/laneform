@@ -1250,8 +1250,16 @@ function cachedProviderTurnLanes(){
   return providerTurnLaneHud(upcomingLaneGuidance(
     tomtomLaneRecords(route),instruction,progress,380,target.index));
 }
-function renderNavigationLaneHud(){
-  if(junctionDetail?.guidanceMode()==='junction'){
+function renderNavigationLaneHud(force=false){
+  const mode=junctionDetail?.guidanceMode();
+  const now=Date.now();
+  // Avoid rebuilding the entire lane DOM at simulation frame rate.
+  // Phase changes, manual scrubbing and newly loaded data render instantly.
+  if(!force&&renderNavigationLaneHud.lastMode===mode&&
+    now-(renderNavigationLaneHud.lastAt||0)<220)return;
+  renderNavigationLaneHud.lastMode=mode;
+  renderNavigationLaneHud.lastAt=now;
+  if(mode==='junction'){
     // At an intersection Cruise ALWAYS disappears, even if OSM has no
     // lane guidance. Only the square HUD may render in this mode.
     renderCruiseGuidance(null);
@@ -1264,7 +1272,7 @@ function renderNavigationLaneHud(){
     renderCruiseGuidance(junctionDetail?.cruise());
   }
 }
-function navHud(){
+function navHud(forceLaneHud=false){
   const sim=state.sim,route=selectedRoute();
   if(!sim.active||!route)return;
   const summary=route.properties?.summary||{};
@@ -1291,7 +1299,7 @@ function navHud(){
   // Junction Detail and the mini lane HUD share the *same* geometry-based
   // sample. Geometry readiness is asynchronous; only show known samples.
   junctionDetail?.update(offset);
-  renderNavigationLaneHud();
+  renderNavigationLaneHud(forceLaneHud);
   renderDiagnostics(false);
 }
 function positionSim(meters,forceCamera=false){
@@ -1301,7 +1309,7 @@ function positionSim(meters,forceCamera=false){
   const p=along(sim.distance);
   if(!p)return;
   sim.marker?.setLngLat(p.point).setRotation(p.angle);
-  navHud();
+  navHud(!sim.playing);
   if(sim.follow)navCamera(p,forceCamera);
   requestDraw(); // update the muted traveled route even when camera following is off
   if(sim.distance>=sim.length)pauseSim();
@@ -1455,7 +1463,7 @@ function attachEvents() {
       // Geometry frequently arrives while the user has playback PAUSED.
       // Redraw the route canvas immediately, not just the compact HUD.
       requestDraw();
-      if(state.sim.active)renderNavigationLaneHud();
+      if(state.sim.active)renderNavigationLaneHud(true);
       renderDiagnostics(true);
     },
     onButtonAction:()=>{
