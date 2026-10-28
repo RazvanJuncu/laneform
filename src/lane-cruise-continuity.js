@@ -129,26 +129,51 @@ export function cruiseFromLaneContinuity({
   return candidates.sort((a,b)=>a.distanceToJunction-b.distanceToJunction)[0]||null;
 }
 
-// Do not manufacture a "preferred" lane from width alone. Still tell the
-// driver when a stable multi-lane section is approaching / already present,
-// so Cruise wakes up when a new lane opens after a one-lane stretch.
+// Last-resort driver preference, after explicit turn markings and mapped
+// branch continuity have both failed to determine a preferred route lane.
+// It is a heuristic, NOT evidence that the preferred lane legally continues.
 export function cruiseFromAvailableLanes({
-  laneFrames=[],progress=0,horizonMeters=260
+  laneFrames=[],progress=0,horizonMeters=260,
+  nextTurnOffset=null,nextTurnDirection=null
 }={}){
   if(!Array.isArray(laneFrames)||!Number.isFinite(progress))return null;
   const valid=laneFrames.filter(safeFrame).sort((a,b)=>a.at-b.at);
+  const candidates=[];
   for(const f of valid){
-    if(f.at<progress-10||f.at>progress+horizonMeters)continue;
+    if(f.at<progress-23||f.at>progress+horizonMeters)continue;
     const nearby=valid.filter(p=>p.laneCount===f.laneCount&&
       p.road===f.road&&p.direction===f.direction&&
       Math.abs(p.at-f.at)<=17&&p.offsets.every((v,i)=>
         Math.abs(v-f.offsets[i])<=1.25));
     if(nearby.length<3||Math.max(...nearby.map(p=>p.at))-
       Math.min(...nearby.map(p=>p.at))<8)continue;
-    return {source:'glide',status:'inferred',kind:'cruise',
-      mode:'available',laneCount:f.laneCount,selected:[],
-      distanceToJunction:Math.max(0,f.at-progress),
-      reason:'Stable mapped lane group; no supported lane preference'};
+    const projected= Math.max(0,f.at-progress);
+    const turnDistance=Number.isFinite(nextTurnOffset)
+      ?nextTurnOffset-progress:Infinity;
+    const prepareTurn=turnDistance>0&&turnDistance<=680;
+    const side=prepareTurn&&
+      (nextTurnDirection==='left'||nextTurnDirection==='right')
+      ?nextTurnDirection:null;
+    // Right-hand driving default (Romania) when no separate maneuver has
+    // priority. Do not claim the last lane has verified through access.
+    const index=side==='left'?0:f.laneCount-1;
+    candidates.push({
+      source:'glide',status:'inferred',kind:'cruise',
+      mode:'available',selectionBasis:'driver-default',
+      confidence:'heuristic',laneCount:f.laneCount,selected:[index],
+      distanceToJunction:projected,
+      timing:projected>28?'upcoming':'current',
+      preferredSide:side||'right',
+      reason:side
+        ?'Unverified driver-style preparation for next '+side+' turn'
+        :'Unverified right-hand driving preference; continuity unknown'
+    });
   }
-  return null;
+  // Prefer a stable lane group under or near the simulated vehicle.
+  // Only if none exists, preview a future widening and explicitly label
+  // the highlighted oval as an AFTER-widening preference.
+  candidates.sort((a,b)=>
+    (a.timing==='current'?0:1)-(b.timing==='current'?0:1)||
+    a.distanceToJunction-b.distanceToJunction);
+  return candidates[0]||null;
 }
