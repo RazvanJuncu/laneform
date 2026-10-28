@@ -19,8 +19,8 @@ const roads=[
 ];
 const args={laneFeatures:roads,throughGuidance:[section()],progress:70};
 const selected=cruiseFromMappedLanes(args);
-assert.deepEqual(selected.selected,[1],
-  'Cruise stays in an explicitly mapped through lane, not left-turn-only');
+assert.deepEqual(selected.selected,[1,2],
+  'Cruise should illuminate both mapped through-capable lanes, never the left-turn-only lane');
 assert.deepEqual(selected.turnOnly,[0]);
 assert.deepEqual(selected.allowedThrough,[1,2]);
 assert.equal(selected.distanceToJunction,190);
