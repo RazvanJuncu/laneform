@@ -1,6 +1,12 @@
 // Read-only, privacy-safe explanation of every visibility decision.
 const finite=Number.isFinite;
 const dist=v=>finite(v)?Math.round(v)+' m':'—';
+const safeError=value=>String(value||'unknown')
+ .replace(/(?:https?:\/\/)[^\s)]+/gi,'[URL withheld]')
+ .replace(/(?:api[_-]?key|token|access[_-]?key)\s*[=:]\s*[^\s&]+/gi,'[credential withheld]')
+ .replace(/sk-[a-z0-9_-]{8,}/gi,'[credential withheld]')
+ .replace(/-?\d{1,3}\.\d{4,}/g,'[coordinate withheld]')
+ .slice(0,160);
 export function evaluateGlideDiagnostics(info={},context={}){
  const route=!!context.routeActive,phase=info.guidanceMode||'cruise';
  const rolling=info.rollingCoverage||{},cruise=info.cruiseGuidance;
@@ -17,7 +23,7 @@ export function evaluateGlideDiagnostics(info={},context={}){
   :cruise.mode==='continuity'?'Mapped lane continuity shows a lane diverging.'
   :cruise.mode==='alignment'?'Inferred alignment for next routed turn.':'Multiple mapped lanes; no supported preferred lane.';}
  else if(info.requesting){cs='pending';cw='OSM download or reconstruction currently running.';}
- else if(fail&&!ready){cs='blocked';cw='Rolling OSM window failed: '+fail.message;}
+ else if(fail&&!ready){cs='blocked';cw='Rolling OSM window failed: '+safeError(fail.message);}
  else if(cooldown&&!hasGeometry){cs='waiting';cw='OSM request cooldown: '+cooldown+'s remaining.';}
  else if(!hasGeometry){cs='no-coverage';cw='No prepared OSM road geometry available near this position.';}
  else if(!count){cs='no-lanes';cw='OSM reconstruction produced no usable lane cross-sections.';}
@@ -26,7 +32,7 @@ export function evaluateGlideDiagnostics(info={},context={}){
  if(!route){js='inactive';jw='Start a route preview.';}
  else if(!finite(info.targetOffsetMeters)){js='no-target';jw='No upcoming TomTom maneuver target. Crossing streets alone may not trigger a junction preview.';}
  else if(!info.ready){js=info.requesting?'pending':info.targetCacheStatus==='unavailable'?'blocked':'waiting';
-  jw=info.targetCacheStatus==='unavailable'?'OSM reconstruction failed: '+(info.targetError||info.reason||'unknown')
+  jw=info.targetCacheStatus==='unavailable'?'OSM reconstruction failed: '+safeError(info.targetError||info.reason||'unknown')
    :info.requesting?'Next junction OSM geometry is loading.'
    :cooldown?'Junction request is queued behind '+cooldown+'s cooldown.':'Next junction is not reconstructed yet.';}
  else if(info.dismissedPreview){js='dismissed';jw='Junction preview manually dismissed for this target.';}
@@ -61,9 +67,9 @@ export function evaluateGlideDiagnostics(info={},context={}){
    {key:'junction',title:'Intersection preview',status:js,reason:jw},
    {key:'lanes',title:'Suggested lanes',status:ls,reason:lw}
   ],counters,
-  scanner:{stage:info.requestStage||'idle',lastError:info.lastOSMError||null,
+  scanner:{stage:info.requestStage||'idle',lastError:info.lastOSMError?safeError(info.lastOSMError):null,
    failures:(rolling.failures||[]).slice(0,4).map(x=>({
-    station:dist(x.offset),error:x.message
+    station:dist(x.offset),error:safeError(x.message)
    }))},
   note:'No API keys, precise coordinates, origin/destination, or raw route geometry included.'
  };
