@@ -29,10 +29,10 @@ export function smallAreaOverpassUrl(center,radiusMeters=165){
     .searchParams.get('bbox').split(',').map(Number);
   const [west,south,east,north]=bbox;
   const box=[south,west,north,east].map(v=>v.toFixed(6)).join(',');
-  // Fetch mapped ways and their referenced nodes, plus tagged nodes in
-  // the region. The OSM XML output is compatible with osm2streets.
+  // Only highway-tagged ways and THEIR referenced nodes are needed for
+  // osm2streets. Avoid downloading unrelated buildings/POIs on every scan.
   const query='[out:xml][timeout:14];'+
-    '(way('+box+');node('+box+'););(._;>;);out body;';
+    '(way["highway"]('+box+'););(._;>;);out body;';
   return 'https://overpass-api.de/api/interpreter?data='+
     encodeURIComponent(query);
 }
