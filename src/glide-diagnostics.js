@@ -36,7 +36,14 @@ export function evaluateGlideDiagnostics(info={},context={}){
  else {cs='insufficient';cw='Mapped geometry has no confirmed multi-lane choice or stable route-continuity evidence.';}
  let js,jw;
  if(!route){js='inactive';jw='Start a route preview.';}
- else if(!finite(info.targetOffsetMeters)){js='no-target';jw='No upcoming TomTom maneuver target. Crossing streets alone may not trigger a junction preview.';}
+ else if(!finite(info.targetOffsetMeters)){js='no-target';jw='No actionable routed turn ahead. Straight-through crossings stay in Cruise and do not open a turn-style preview.';}
+ else if(finite(info.distanceToTargetMeters)&&
+   info.distanceToTargetMeters>(info.junctionPrefetchLookaheadMeters||850)&&
+   !info.ready){
+   js='distant';jw='Next actionable turn is '+dist(info.distanceToTargetMeters)+
+     ' away. Dedicated OSM prefetch is intentionally deferred until '+
+     (info.junctionPrefetchLookaheadMeters||850)+' m; rolling Cruise owns the intervening road.';
+ }
  else if(!info.ready){js=info.requesting?'pending':info.targetCacheStatus==='unavailable'?'blocked':'waiting';
   jw=info.targetCacheStatus==='unavailable'?'OSM reconstruction failed: '+safeError(info.targetError||info.reason||'unknown')
    :info.requesting?'Next junction OSM geometry is loading.'
@@ -67,6 +74,8 @@ export function evaluateGlideDiagnostics(info={},context={}){
     ?cruise.selected.map(i=>i+1).join(', ')||'none':'none',
   cruiseConfidence:cruise?.confidence||cruise?.status||'none',
   junctionGeometrySource:info.ready?info.geometrySource||'unknown':'not-ready',
+  junctionPrefetch:info.junctionPrefetchEligible?'imminent turn':'deferred',
+  straightCrossingPreview:'Cruise-only',
   cachedJunctionReuses:info.reusedJunctions||0,
   reusedFromStation:dist(info.reusedFromStation),
   rollingRequests:rolling.requestedStations||0,rollingReady:(rolling.readyStations||[]).length,
