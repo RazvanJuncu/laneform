@@ -13,7 +13,8 @@ import {isJunctionPhase,stableMappedLaneGroup}
 import {cruiseFromMappedLanes,cruiseFromRouteAlignment} from './lane-cruise.js';
 import {cruiseFromLaneContinuity,cruiseFromAvailableLanes}
   from './lane-cruise-continuity.js';
-import {nextRollingStation,rollingAreaPoint,ROLLING_AREA_RADIUS_METERS}
+import {nextRollingStation,rollingAreaPoint,ROLLING_AREA_RADIUS_METERS,
+  prioritizeJunctionDownload}
   from './cruise-rolling-window.js';
 import {reusableAreaCandidates,reconstructedJunctionCovered}
   from './osm-area-reuse.js';
@@ -436,6 +437,16 @@ export function createJunctionDetail({
     if(state.pendingTimer!==null)clearTimeout(state.pendingTimer);
     state.pendingTimer=null;
   }
+  function junctionNeedsPriority(next=state.target){
+    if(!junctionDownloadEligible(next,state.progress))return false;
+    const total=state.route?.properties?.summary?.lengthInMeters;
+    const station=nextRollingStation(state.progress,total);
+    return prioritizeJunctionDownload({
+      aheadMeters:next.offset-state.progress,
+      rollingStation:station,
+      rollingCached:station!==null&&state.rollingCache.has(station)
+    });
+  }
   function ensureNextPrepared(){
     const next=state.target;
     if(!next || !state.route)return;
@@ -444,6 +455,11 @@ export function createJunctionDetail({
     // Rolling road analysis owns distant parts of the route.
     if(!junctionDownloadEligible(next,state.progress)){
       clearPending();return;
+    }
+    if(!junctionNeedsPriority(next)){
+      clearPending();
+      state.reason='rolling-first';
+      return;
     }
     // Highest priority: use geometry already fetched by Cruise. This is
     // instant even during the 30s network cooldown and costs zero requests.
@@ -509,7 +525,7 @@ export function createJunctionDetail({
   function ensureRollingPrepared(){
     if(!state.route)return;
     // A REAL maneuver in prefetch range wins the shared scheduler.
-    if(junctionDownloadEligible(state.target,state.progress)){
+    if(junctionNeedsPriority()){
       const targetKey=junctionCacheKey(state.target.position);
       if(!state.cache.has(targetKey)){
         clearRollingPending();
@@ -632,7 +648,7 @@ export function createJunctionDetail({
     setTarget(next);
     // A selected target may be kilometres away. Begin prefetch only when
     // simulation enters its lookahead window, not at first selection.
-    if(junctionDownloadEligible(state.target,state.progress))
+    if(junctionNeedsPriority())
       ensureNextPrepared();
     updateAppearance();
     ensureRollingPrepared();
