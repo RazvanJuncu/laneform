@@ -183,6 +183,15 @@ export function createJunctionDetail({
   };
   const map=()=>mapGetter?.();
   const button=()=>buttonGetter?.();
+  // Hydrate persistent areas once. Until then, avoid a redundant network
+  // request that might already be fulfilled by the local cache.
+  void osmTransport.ready().then(()=>{
+    if(state.route){
+      ensureNextPrepared();
+      ensureRollingPrepared();
+      onGuidanceChange();
+    }
+  });
   const entry=()=>state.target?state.cache.get(junctionCacheKey(state.target.position)):null;
   function cachedThroughCrossings(){
     const e=entry();
@@ -454,6 +463,8 @@ export function createJunctionDetail({
   }
   function junctionNeedsPriority(next=state.target){
     if(!junctionDownloadEligible(next,state.progress))return false;
+    // Previously verified local geometry costs no network slots.
+    if(osmTransport.hasCached?.(next.position,135))return true;
     const total=state.route?.properties?.summary?.lengthInMeters;
     const station=nextRollingStation(state.progress,total);
     return prioritizeJunctionDownload({
@@ -464,7 +475,7 @@ export function createJunctionDetail({
   }
   function ensureNextPrepared(){
     const next=state.target;
-    if(!next || !state.route)return;
+    if(!next || !state.route||osmTransport.isReady?.()===false)return;
     const key=junctionCacheKey(next.position);
     // Do not spend the shared 30s network slot on a turn 5 km away.
     // Rolling road analysis owns distant parts of the route.
@@ -481,7 +492,8 @@ export function createJunctionDetail({
     if(reuseRollingForJunction(next))return;
     if(state.cache.has(key))return;
     if(state.inflight)return; // finishing request will schedule the next
-    const remaining=Math.max(
+    const fromLocal=osmTransport.hasCached?.(next.position,135);
+    const remaining=fromLocal?0:Math.max(
       COOLDOWN_MS-(Date.now()-state.lastCall),osmTransport.waitMs());
     if(remaining>0){
       // update() runs on every simulation frame; do NOT restart the
@@ -496,18 +508,22 @@ export function createJunctionDetail({
       return;
     }
     clearPending();
-    state.lastCall=Date.now();
-    state.inflight=true;state.reason='loading';
-    state.requestStage='junction-download';
+    if(!fromLocal)state.lastCall=Date.now();
+    state.inflight=true;state.reason=fromLocal?'local-cache':'loading';
+    state.requestStage=fromLocal?'junction-cache':'junction-download';
     const generation=state.generation;
     void (async()=>{
       try{
         const xml=await downloadJunction(next.position);
         if(generation===state.generation)state.requestStage='junction-reconstruct';
-        const data=await reconstruct(xml);
+        let data;
+        try{data=await reconstruct(xml);}
+        catch(error){osmTransport.invalidate(next.position,135);throw error;}
         if(generation!==state.generation)return;
-        const cached={data,status:'ready'};
+        const cached={data,status:'ready',
+          geometrySource:fromLocal?'local-cache':'junction-download'};
         classifyTarget(next,cached);
+        osmTransport.storeVerified(next.position,135,xml);
         state.cache.set(key,cached);
         if(state.cache.size>MAX_CACHE)state.cache.delete(state.cache.keys().next().value);
         state.reason='ready';state.lastOSMError=null;
@@ -539,7 +555,7 @@ export function createJunctionDetail({
     state.rollingPendingTimer=null;
   }
   function ensureRollingPrepared(){
-    if(!state.route)return;
+    if(!state.route||osmTransport.isReady?.()===false)return;
     // A REAL maneuver in prefetch range wins the shared scheduler.
     if(junctionNeedsPriority()){
       const targetKey=junctionCacheKey(state.target.position);
@@ -570,7 +586,11 @@ export function createJunctionDetail({
         data:reused,corridor:scan,throughGuidance:[]});
       onGuidanceChange();return;
     }
-    const cooldown=Math.max(
+    const point=rollingAreaPoint(state.route,station,routeProfile,
+      positionAtDistance);
+    if(!point)return;
+    const fromLocal=osmTransport.hasCached?.(point,ROLLING_AREA_RADIUS_METERS);
+    const cooldown=fromLocal?0:Math.max(
       COOLDOWN_MS-(Date.now()-state.lastCall),osmTransport.waitMs());
     if(cooldown>0){
       if(state.rollingPendingTimer!==null)return;
@@ -581,20 +601,21 @@ export function createJunctionDetail({
       },cooldown+35);
       return;
     }
-    const point=rollingAreaPoint(state.route,station,routeProfile,
-      positionAtDistance);
-    if(!point)return;
     clearRollingPending();
-    state.inflight=true;state.lastCall=Date.now();
-    state.requestStage='rolling-download';
-    state.rollingAttempts++;
+    state.inflight=true;
+    if(!fromLocal)state.lastCall=Date.now();
+    state.requestStage=fromLocal?'rolling-cache':'rolling-download';
+    if(!fromLocal)state.rollingAttempts++;
     const generation=state.generation;
     void (async()=>{
       try{
         const xml=await downloadJunction(point,ROLLING_AREA_RADIUS_METERS);
         if(generation===state.generation)state.requestStage='rolling-reconstruct';
-        const data=await reconstruct(xml);
+        let data;
+        try{data=await reconstruct(xml);}
+        catch(error){osmTransport.invalidate(point,ROLLING_AREA_RADIUS_METERS);throw error;}
         if(generation!==state.generation)return;
+        osmTransport.storeVerified(point,ROLLING_AREA_RADIUS_METERS,xml);
         const corridor=buildLaneCorridor({
           route:state.route,offset:station,
           instruction:{maneuver:'STRAIGHT',routeOffsetInMeters:station},
@@ -779,9 +800,13 @@ export function createJunctionDetail({
         expectedLaneTurn(state.route?.properties?.guidance?.
           instructions?.[state.target.index])==='through')return null;
       const e=entry();
-      if(!e?.data)return {status:e?.status==='unavailable'?'unavailable':'loading',
-        description:e?.status==='unavailable'
-          ?'OSM lane geometry unavailable':'Preparing reconstructed lanes'};
+      if(!e?.data){
+        const unavailable=e?.status==='unavailable'||osmTransport.waitMs()>0;
+        return {status:unavailable?'unavailable':'loading',
+          description:unavailable
+            ?'Detailed lanes unavailable; road-level navigation remains active'
+            :'Preparing optional reconstructed lanes'};
+      }
       const corridor=activeGuidance()?.corridor;
       if(corridor?.recommendation)return null;
       // A map may already have an inferred lane trajectory without knowing
@@ -806,7 +831,7 @@ export function createJunctionDetail({
       ready:!!entry()?.data,
       targetCacheStatus:entry()?.status||'not-cached',
       geometrySource:entry()?.reusedFromRollingStation!=null
-        ?'cruise-cache':'junction-download',
+        ?'cruise-cache':entry()?.geometrySource||'junction-download',
       reusedJunctions:state.reusedJunctions,
       reusedFromStation:entry()?.reusedFromRollingStation??null,
       targetError:entry()?.error||null,
