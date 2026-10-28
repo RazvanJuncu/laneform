@@ -22,12 +22,13 @@ const createJunction=new Function('state','junctionDownloadEligible',
  'clearPending','setTimeout','Date','downloadJunction',
  'reconstruct','classifyTarget','MAX_CACHE','updateAppearance',
  'onGuidanceChange','ensureRollingPrepared','console','junctionNeedsPriority',
+ 'osmTransport',
  junctionSource+'\nreturn ensureNextPrepared;');
 const junction=createJunction(state,junctionDownloadEligible,
  p=>p.join(','),()=>false,30000,()=>{cleared++},
  (fn,ms)=>{scheduled++;delayed=ms;return scheduled;},Date,
  ()=>{fetches++},()=>{},()=>{},5,()=>{},()=>{},()=>{},console,
- ()=>allowJunction);
+ ()=>allowJunction,{waitMs:()=>0});
 junction();
 assert.equal(scheduled,0,'5.4km target must not reserve a request timer');
 assert.equal(fetches,0);
@@ -56,9 +57,11 @@ const rollingState={...state,target,rollingLastStation:null,
 let prioritized=0,rollingCancelled=0;
 const createRolling=new Function('state','junctionNeedsPriority',
  'junctionCacheKey','clearRollingPending','ensureNextPrepared',
+ 'osmTransport',
  rollingSource+'\nreturn ensureRollingPrepared;');
 const rolling=createRolling(rollingState,()=>true,
- p=>p.join(','),()=>{rollingCancelled++},()=>{prioritized++});
+ p=>p.join(','),()=>{rollingCancelled++},()=>{prioritized++},
+ {waitMs:()=>0});
 rollingState.progress=4600;rolling();
 assert.equal(prioritized,1,'Imminent junction must take priority over rolling fetch');
 assert.equal(rollingCancelled,1);
