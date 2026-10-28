@@ -31,7 +31,6 @@ const junction=createJunction(state,junctionDownloadEligible,
 junction();
 assert.equal(scheduled,0,'5.4km target must not reserve a request timer');
 assert.equal(fetches,0);
-const clearedBeforeCooldown=cleared;
 state.progress=4590; // 810m away; Cruise scan has not completed
 junction();
 assert.equal(scheduled,0,
@@ -39,6 +38,7 @@ assert.equal(scheduled,0,
 assert.equal(prioritizeJunctionDownload({
  aheadMeters:810,rollingStation:4800,rollingCached:false
 }),false);
+const clearedBeforeCooldown=cleared;
 allowJunction=true; // Cruise scan cached, or junction becomes urgent
 junction();
 assert.equal(scheduled,1,
