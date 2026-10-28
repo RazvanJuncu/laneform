@@ -3,7 +3,7 @@
 // Geometry is OSM-derived; provisional lane-level planning is for preview only.
 import {buildJunctionTargets,upcomingJunction,junctionCacheKey,junctionViewMode,
   junctionDownloadEligible} from './junction-logic.js';
-import {smallAreaOsmUrl,MAX_OSM_BYTES,validateOsmXML,
+import {smallAreaOsmUrl,smallAreaOverpassUrl,MAX_OSM_BYTES,validateOsmXML,
   validateGeojson,blankCollection} from './street-geometry-adapter.js';
 import {partitionJunctionGeometry} from './junction-focus.js';
 import {simplifiedJunctionGeometry} from './junction-simplified-map.js';
@@ -80,14 +80,14 @@ async function reconstruct(xml){
   }finally{net?.free?.();}
 }
 async function downloadJunction(position,radiusMeters=135){
-  const url=smallAreaOsmUrl(position,radiusMeters);
+  const url=smallAreaOverpassUrl(position,radiusMeters);
   const aborter=new AbortController();
   const timer=setTimeout(()=>aborter.abort(),12000);
   try{
     const response=await fetch(url,{signal:aborter.signal,credentials:'omit'});
-    if(!response.ok)throw Error('OSM HTTP '+response.status);
+    if(!response.ok)throw Error('Overpass HTTP '+response.status);
     const bytes=Number(response.headers.get('content-length'));
-    if(bytes>MAX_OSM_BYTES)throw Error('OSM area too large');
+    if(bytes>MAX_OSM_BYTES)throw Error('Overpass area too large');
     const xml=await response.text();
     validateOsmXML(xml);
     return xml;
