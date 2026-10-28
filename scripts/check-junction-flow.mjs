@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {buildJunctionTargets,upcomingJunction,junctionViewMode,junctionCacheKey}
+import {buildJunctionTargets,upcomingJunction,junctionViewMode,junctionCacheKey,isPreviewManeuver}
  from '../src/junction-logic.js';
 import {smallAreaOsmUrl} from '../src/street-geometry-adapter.js';
 const main=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
@@ -17,6 +17,12 @@ const route={
       routeOffsetInMeters:1372,message:'You have reached your destination'}
   ]}}
 };
+assert.equal(isPreviewManeuver({maneuver:'CONTINUE',message:'Continue ahead'}),false);
+assert.equal(isPreviewManeuver({instructionType:'DIRECTION_INFO',
+  message:'Proceed along the street'}),false,
+  'Generic instructions must not become junction previews');
+assert.equal(isPreviewManeuver({maneuver:'TURN_RIGHT',message:'Turn right'}),true);
+assert.equal(isPreviewManeuver({maneuver:'KEEP_RIGHT',message:'Keep right'}),true);
 const junctions=buildJunctionTargets(route);
 assert.equal(junctions.length,2,'Exclude arrival and identify consecutive junctions');
 assert.ok(junctions[0].position[0]>13.003);
