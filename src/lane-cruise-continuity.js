@@ -154,19 +154,17 @@ export function cruiseFromAvailableLanes({
     const side=prepareTurn&&
       (nextTurnDirection==='left'||nextTurnDirection==='right')
       ?nextTurnDirection:null;
-    // Right-hand driving default (Romania) when no separate maneuver has
-    // priority. Do not claim the last lane has verified through access.
-    const index=side==='left'?0:f.laneCount-1;
+    // Stable polygons establish the number of lanes, NOT which one
+    // continues legally. Preserve the useful width signal, but never
+    // highlight a default left/right lane without through/turn evidence.
     candidates.push({
       source:'glide',status:'inferred',kind:'cruise',
-      mode:'available',selectionBasis:'driver-default',
-      confidence:'heuristic',laneCount:f.laneCount,selected:[index],
+      mode:'available',selectionBasis:'geometry-only',
+      confidence:'unverified',laneCount:f.laneCount,selected:[],
       distanceToJunction:projected,
       timing:projected>28?'upcoming':'current',
-      preferredSide:side||'right',
-      reason:side
-        ?'Unverified driver-style preparation for next '+side+' turn'
-        :'Unverified right-hand driving preference; continuity unknown'
+      preferredSide:side,
+      reason:'Mapped lane count only; route-valid lane choice unverified'
     });
   }
   // Prefer a stable lane group under or near the simulated vehicle.
