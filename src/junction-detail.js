@@ -2,7 +2,7 @@
 // Prepares ONE upcoming routed junction at a time, never per animation frame.
 // Geometry is OSM-derived; provisional lane-level planning is for preview only.
 import {buildJunctionTargets,upcomingJunction,junctionCacheKey,junctionViewMode,
-  junctionDownloadEligible} from './junction-logic.js';
+  junctionDownloadEligible,isPreviewManeuver} from './junction-logic.js';
 import {smallAreaOsmUrl,MAX_OSM_BYTES,validateOsmXML,
   validateGeojson,blankCollection} from './street-geometry-adapter.js';
 import {partitionJunctionGeometry} from './junction-focus.js';
@@ -204,14 +204,19 @@ export function createJunctionDetail({
     // Through-junctions remain available to Cruise's rolling analysis,
     // but must never become two-stage turn guidance or a zoomed preview.
     const target=state.target;
-    return target?{
-      kind:'maneuver',offset:target.offset,corridor:entry()?.corridor
-    }:null;
+    if(!target)return null;
+    const instruction=state.route?.properties?.guidance?.
+      instructions?.[target.index];
+    // Protect the mode even if a stale or generic instruction slipped into
+    // the target list: straight crossings never become two-stage guidance.
+    if(!isPreviewManeuver(instruction)||
+      expectedLaneTurn(instruction)==='through')return null;
+    return {kind:'maneuver',offset:target.offset,corridor:entry()?.corridor};
   }
   function junctionPhase(){
     if(!state.route)return false;
     return isJunctionPhase({
-      targetOffset:state.target?.offset,progress:state.progress
+      targetOffset:activeGuidance()?.offset,progress:state.progress
     });
   }
   function cruiseHint(){
@@ -407,7 +412,7 @@ export function createJunctionDetail({
     if(!b)return;
     const e=entry();
     const d=state.target?.offset-state.progress??Infinity;
-    b.hidden=!state.route || !state.target || d>700 || d < -35 ||
+    b.hidden=!state.route || !activeGuidance() || d>700 || d < -35 ||
       !e?.data;
     if(!b.hidden){
       b.textContent=state.display
@@ -433,7 +438,7 @@ export function createJunctionDetail({
         (center.lng-state.target.position[0])*80000,
         (center.lat-state.target.position[1])*111000)
       :Infinity;
-    state.display=junctionViewMode({
+    state.display=!!activeGuidance()&&junctionViewMode({
       target:state.target,progress:state.progress,loaded:!!e?.data,
       dismissedId:state.dismissed,forcedId:state.forced,
       zoom:m?.getZoom?.()??15.65,
@@ -666,9 +671,11 @@ export function createJunctionDetail({
         ?state.route?.properties?.guidance?.instructions?.[state.target?.index]
         :null;
       const maneuver=expectedLaneTurn(instruction);
-      if(maneuver==='through')return null;
       const selectedTurnSide=/left/.test(maneuver||'')?'left':
         /right/.test(maneuver||'')?'right':null;
+      // Unknown KEEP/MERGE, straight and geometry-only movements do not
+      // justify picking Approach/After lanes without directional evidence.
+      if(!selectedTurnSide)return null;
       const frames=g.corridor.laneFrames||[];
       // The green corridor may have a reliable lane GROUP but no stable
       // ordinal for its chosen sample. Use several consecutive OSM
