@@ -1,8 +1,8 @@
 // Contextual street detail for navigation preview.
 // Prepares ONE upcoming routed junction at a time, never per animation frame.
 // Geometry is OSM-derived; provisional lane-level planning is for preview only.
-import {buildJunctionTargets,upcomingJunction,junctionCacheKey,junctionViewMode}
-  from './junction-logic.js';
+import {buildJunctionTargets,upcomingJunction,junctionCacheKey,junctionViewMode,
+  junctionDownloadEligible} from './junction-logic.js';
 import {smallAreaOsmUrl,MAX_OSM_BYTES,validateOsmXML,
   validateGeojson,blankCollection} from './street-geometry-adapter.js';
 import {partitionJunctionGeometry} from './junction-focus.js';
@@ -201,35 +201,17 @@ export function createJunctionDetail({
       .sort((a,b)=>a.offset-b.offset);
   }
   function activeGuidance(){
-    const e=entry(),target=state.target;
-    // Cruise's rolling scanner may identify important crossings even
-    // where TomTom has no turn and therefore no routed junction target.
-    const straight=cachedThroughCrossings().find(t=>
-      t.corridor?.status==='provisional'&&
-      !!twoStageLaneGuidance(
-        t.corridor.recommendation||
-          stableMappedLaneGroup(t.corridor.laneFrames,t.offset,'through'),
-        t.corridor.exitRecommendation,t.offset-state.progress,{
-          nearApproach:t.corridor.nearApproachRecommendation
-        })&&
-      t.offset-state.progress>=-15&&t.offset-state.progress<=200&&
-      (!target||t.offset<target.offset-45));
-    if(straight)return {
-      kind:'through',offset:straight.offset,corridor:straight.corridor
-    };
+    // Through-junctions remain available to Cruise's rolling analysis,
+    // but must never become two-stage turn guidance or a zoomed preview.
+    const target=state.target;
     return target?{
-      kind:'maneuver',offset:target.offset,corridor:e?.corridor
+      kind:'maneuver',offset:target.offset,corridor:entry()?.corridor
     }:null;
   }
   function junctionPhase(){
     if(!state.route)return false;
-    const crossing=cachedThroughCrossings()
-      .find(t=>t.offset-state.progress>=-35&&
-        t.offset-state.progress<=200);
     return isJunctionPhase({
-      targetOffset:state.target?.offset,
-      throughOffset:crossing?.offset??null,
-      progress:state.progress
+      targetOffset:state.target?.offset,progress:state.progress
     });
   }
   function cruiseHint(){
@@ -458,6 +440,11 @@ export function createJunctionDetail({
     const next=state.target;
     if(!next || !state.route)return;
     const key=junctionCacheKey(next.position);
+    // Do not spend the shared 30s network slot on a turn 5 km away.
+    // Rolling road analysis owns distant parts of the route.
+    if(!junctionDownloadEligible(next,state.progress)){
+      clearPending();return;
+    }
     // Highest priority: use geometry already fetched by Cruise. This is
     // instant even during the 30s network cooldown and costs zero requests.
     if(reuseRollingForJunction(next))return;
@@ -520,6 +507,15 @@ export function createJunctionDetail({
   }
   function ensureRollingPrepared(){
     if(!state.route)return;
+    // A REAL maneuver in prefetch range wins the shared scheduler.
+    if(junctionDownloadEligible(state.target,state.progress)){
+      const targetKey=junctionCacheKey(state.target.position);
+      if(!state.cache.has(targetKey)){
+        clearRollingPending();
+        ensureNextPrepared();
+        return;
+      }
+    }
     const total=state.route.properties?.summary?.lengthInMeters;
     const station=nextRollingStation(state.progress,total);
     state.rollingLastStation=station;
@@ -633,6 +629,10 @@ export function createJunctionDetail({
     state.progress=progress;
     const next=upcomingJunction(state.targets,progress);
     setTarget(next);
+    // A selected target may be kilometres away. Begin prefetch only when
+    // simulation enters its lookahead window, not at first selection.
+    if(junctionDownloadEligible(state.target,state.progress))
+      ensureNextPrepared();
     updateAppearance();
     ensureRollingPrepared();
   }
@@ -645,6 +645,7 @@ export function createJunctionDetail({
         ?state.route?.properties?.guidance?.instructions?.[state.target?.index]
         :null;
       const maneuver=expectedLaneTurn(instruction);
+      if(maneuver==='through')return null;
       const selectedTurnSide=/left/.test(maneuver||'')?'left':
         /right/.test(maneuver||'')?'right':null;
       const frames=g.corridor.laneFrames||[];
