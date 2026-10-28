@@ -33,6 +33,34 @@ https://razvanjuncu.github.io/laneform/
 
 If needed, go to **Settings → Pages → Build and deployment**, select **GitHub Actions**.
 
+## Diagnostics — why Glide guidance is missing
+
+During route simulation, open **Diagnostics** from the simulation bar, or use
+**⋯ → Diagnostics** from the top right. The tab displays live, read-only
+status and **a specific reason** for each of Cruise, Intersection Preview and
+Suggested Lanes. It distinguishes deliberately suppressed Cruise during a
+junction from missing or ambiguous OSM road/lane data, missing TomTom
+maneuver targets, pending requests, request cooldowns, failed OSM
+downloads/reconstructions and ordinary preview distance thresholds.
+
+The **OSM pipeline & counters** section shows route-relative progress,
+distance to the next routed junction, active loading stage, cached/failed
+rolling windows, extracted lane polygon and cross-section counts, tagged
+turn polygons, and per-window corridor status. It refreshes during
+simulation and when OSM data arrives while playback is paused.
+
+Use **Copy report** to share an actionable diagnostic snapshot. It includes
+the deployed build SHA, decision statuses and aggregated evidence but **no
+TomTom API key, GPS coordinates, addresses, destination or route geometry**.
+Error messages have URLs, credentials and coordinate-like numbers redacted.
+The tab does not fetch additional data. Equivalent browser-console helpers:
+`glideDiagnostics()` and `glideDiagnosticsReport()`; the original
+`glideJunctionInfo()` exposes more technical internals and is not needed
+for routine debugging.
+
+A missing indicator is not proof that a single lane is sufficient or that
+a maneuver is safe. Lane routing remains an unverified simulation feature.
+
 ## Development
 
 Requires Node.js 24+.
