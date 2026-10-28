@@ -11,6 +11,8 @@ export function evaluateGlideDiagnostics(info={},context={}){
  const route=!!context.routeActive,phase=info.guidanceMode||'cruise';
  const rolling=info.rollingCoverage||{},cruise=info.cruiseGuidance;
  const cooldown=finite(info.cooldownRemainingMs)?Math.ceil(Math.max(0,info.cooldownRemainingMs)/1000):0;
+ const playbackRate=finite(context.playbackRate)?context.playbackRate:1;
+ const travelDuringCooldown=cooldown*12.5*playbackRate;
  const station=rolling.activeStation;
  const fail=(rolling.failures||[]).find(e=>e.offset===station)||(rolling.failures||[])[0];
  const ready=(rolling.readyStations||[]).includes(station);
@@ -36,7 +38,7 @@ export function evaluateGlideDiagnostics(info={},context={}){
  else if(!info.ready){js=info.requesting?'pending':info.targetCacheStatus==='unavailable'?'blocked':'waiting';
   jw=info.targetCacheStatus==='unavailable'?'OSM reconstruction failed: '+safeError(info.targetError||info.reason||'unknown')
    :info.requesting?'Next junction OSM geometry is loading.'
-   :cooldown?'Junction request is queued behind '+cooldown+'s cooldown.':'Next junction is not reconstructed yet.';}
+   :cooldown?'Junction request queued for '+cooldown+'s. At the current simulation playback rate the vehicle may travel '+dist(travelDuringCooldown)+' before a new request can begin.':'Next junction is not reconstructed yet.';}
  else if(info.dismissedPreview){js='dismissed';jw='Junction preview manually dismissed for this target.';}
  else if(info.distanceToTargetMeters>380&&!info.forcedPreview){js='ahead';jw='Next junction '+dist(info.distanceToTargetMeters)+' away; auto preview begins at 380 m.';}
  else if(info.viewReason==='map-not-ready'){js='waiting';jw='Map style not ready to display overlay.';}
@@ -64,6 +66,8 @@ export function evaluateGlideDiagnostics(info={},context={}){
   rollingRequests:rolling.requestedStations||0,rollingReady:(rolling.readyStations||[]).length,
   rollingFailed:(rolling.failures||[]).length,
   activeStation:dist(station),cooldownSeconds:cooldown,
+  playbackRate:playbackRate+'×',
+  estimatedTravelDuringCooldown:dist(travelDuringCooldown),
   currentRequest:info.requestStage||'idle',zoom:finite(info.zoom)?Number(info.zoom.toFixed(1)):null
  };
  return {version:context.version||'unknown',
