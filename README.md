@@ -33,6 +33,28 @@ https://razvanjuncu.github.io/laneform/
 
 If needed, go to **Settings → Pages → Build and deployment**, select **GitHub Actions**.
 
+## Reusing OSM reconstruction before the cooldown
+
+Junction Detail now inspects all currently cached Cruise rolling windows
+**before** waiting for its separate OSM request. A window can cover a
+nearby turning junction even if its own station was sampled for straight
+road continuity. It gets converted to a route-specific junction
+reconstruction locally; the 30-second network cooldown is not involved.
+An area is considered reusable only when the computed corridor contains
+**multiple mapped lane-frame samples on both sides** of the intended
+junction. A cached extract clipped at the edge of the turn is rejected,
+and the normal network request remains pending. Rejected window/target
+combinations are memoized to avoid CPU-intensive geometry checks every
+animation frame. Successful reuse is shown as
+`junctionGeometrySource: cruise-cache` and counted in Diagnostics.
+
+The public OSM editing API is not an appropriate long-term source of
+frequent read-only navigation-area downloads. For production-scale
+simulation, preprocessed regional OSM extracts / a suitable read-only
+service and a longer on-device geometry cache are preferable. The
+cooldown remains at 30 seconds; this change reduces redundant requests
+but cannot guarantee every junction at high playback speeds.
+
 ## Diagnostics — why Glide guidance is missing
 
 During route simulation, open **Diagnostics** from the simulation bar, or use
