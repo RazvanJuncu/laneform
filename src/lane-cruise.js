@@ -75,11 +75,16 @@ export function cruiseFromMappedLanes({
       ?nextTurnDirection:null;
     const ideal=nextSide==='left'?0:nextSide==='right'
       ?ordered.length-1:(ordered.length-1)/2+.25;
-    const selected=[...through].sort((a,b)=>
-      Math.abs(a-ideal)-Math.abs(b-ideal)||a-b)[0];
+    const ranked=[...through].sort((a,b)=>
+      Math.abs(a-ideal)-Math.abs(b-ideal)||a-b);
+    // With explicit evidence that several lanes are through-capable,
+    // show up to two valid choices. If a subsequent turn is approaching,
+    // narrow that to the better aligned lane.
+    const selected=nextSide?[ranked[0]]:ranked.slice(0,2)
+      .sort((a,b)=>a-b);
     return {
       source:'glide',status:'inferred',kind:'cruise',mode:'turn-only',
-      laneCount:ordered.length,selected:[selected],
+      laneCount:ordered.length,selected,
       allowedThrough:through,turnOnly:forced,
       distanceToJunction:candidate.offset-progress,
       reason:'OSM explicitly maps through and turn-only lanes',
