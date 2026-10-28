@@ -67,4 +67,12 @@ assert.ok(!privateExport.includes('secret1234'),
 assert.ok(!privateExport.includes('44.429876'),
   'Raw coordinate data must not be exposed');
 
+const fastSimulation=evaluateGlideDiagnostics({...basic,
+  cooldownRemainingMs:8000
+},{...context,playbackRate:7});
+assert.match(fastSimulation.sections[1].reason,/700 m/,
+  'Show how far a 7x simulation moves before the next OSM request');
+assert.equal(fastSimulation.counters.playbackRate,'7×');
+assert.equal(fastSimulation.counters.estimatedTravelDuringCooldown,'700 m');
+
 console.log('Glide diagnostics reasons, phase suppression and safe export passed.');
