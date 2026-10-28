@@ -556,8 +556,17 @@ export function createJunctionDetail({
   }
   function ensureRollingPrepared(){
     if(!state.route||osmTransport.isReady?.()===false)return;
-    // A REAL maneuver in prefetch range wins the shared scheduler.
-    if(junctionNeedsPriority()){
+    const total=state.route.properties?.summary?.lengthInMeters;
+    const station=nextRollingStation(state.progress,total);
+    state.rollingLastStation=station;
+    if(station===null||state.rollingCache.has(station))return;
+    // Previously verified local rolling geometry is always eligible for
+    // restoration, even when a nearby junction's network fetch is paused.
+    const point=rollingAreaPoint(state.route,station,routeProfile,
+      positionAtDistance);
+    if(!point)return;
+    const fromLocal=!!osmTransport.hasCached?.(point,ROLLING_AREA_RADIUS_METERS);
+    if(junctionNeedsPriority()&&!fromLocal){
       const targetKey=junctionCacheKey(state.target.position);
       if(!state.cache.has(targetKey)){
         clearRollingPending();
@@ -565,10 +574,6 @@ export function createJunctionDetail({
         return;
       }
     }
-    const total=state.route.properties?.summary?.lengthInMeters;
-    const station=nextRollingStation(state.progress,total);
-    state.rollingLastStation=station;
-    if(station===null||state.rollingCache.has(station))return;
     // Existing targeted junction has priority. Maintain one OSM request at
     // a time with the same 30 s cooldown as Junction Detail. Never request
     // OSM (or TomTom!) on every 5m sampling or animation tick.
@@ -586,10 +591,6 @@ export function createJunctionDetail({
         data:reused,corridor:scan,throughGuidance:[]});
       onGuidanceChange();return;
     }
-    const point=rollingAreaPoint(state.route,station,routeProfile,
-      positionAtDistance);
-    if(!point)return;
-    const fromLocal=osmTransport.hasCached?.(point,ROLLING_AREA_RADIUS_METERS);
     const cooldown=fromLocal?0:Math.max(
       COOLDOWN_MS-(Date.now()-state.lastCall),osmTransport.waitMs());
     if(cooldown>0){
