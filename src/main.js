@@ -5,6 +5,7 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import mapStyle from './glide-map-style.json';
 import { splitPathByDistance } from './route-progress.js';
 import { extractRouteLaneGuidance, upcomingLaneGuidance } from './lane-assist.js';
+import {providerTurnLaneHud} from './provider-lane-fallback.js';
 import { nextManeuverState, arrivalApproachText } from './maneuver-guidance.js';
 import {DEFAULT_SIM_RATE,simulationPlaybackRate,
   simulationMetersPerSecond,simulationSpeedLabel} from './simulation-speed.js';
@@ -1079,9 +1080,12 @@ function renderLaneAssistance(laneData,laneState=null){
   const panel=$('laneGuidance');
   panel.replaceChildren();
   panel.hidden=true;
-  // Both rows use the same OSM lane samples as the green route. Never mix
-  // independently inferred HUD arrows from TomTom with Glide's trajectory.
-  if(laneData?.source!=='glide'||laneData.status!=='inferred'||
+  // OSM gives detailed geometry; TomTom can supply a separate, clearly
+  // attributed single-stage route lane recommendation with zero new calls.
+  const providerFallback=laneData?.source==='tomtom'&&
+    laneData.status==='provider-recommendation';
+  if((!providerFallback&&(laneData?.source!=='glide'||
+    laneData?.status!=='inferred'))||
     !Number.isInteger(laneData.laneCount)||laneData.laneCount<1||
     laneData.laneCount>9||!Array.isArray(laneData.selected)||
     !laneData.selected.length){
@@ -1143,12 +1147,12 @@ function renderLaneAssistance(laneData,laneState=null){
   const info=document.createElement('span');
   info.className='lane-source';
   const ahead=Number(laneData.distanceToManeuver);
-  info.textContent='Suggested lanes · '+
+  info.textContent=(providerFallback?'Suggested turn lanes · ':'Suggested lanes · ')+
     (laneData.kind==='through'?'continue straight · ':'')+
     (Number.isFinite(ahead)?distance(Math.max(0,ahead))+' ahead · ':'')+
-    'Glide (inferred)';
+    (providerFallback?'TomTom route guidance':'Glide (inferred)');
   panel.append(info,approach);
-  const after=laneRow(laneData.exit,'After junction');
+  const after=providerFallback?null:laneRow(laneData.exit,'After junction');
   if(after)panel.append(after);
   panel.hidden=false;
 }
@@ -1239,8 +1243,19 @@ function renderNavigationLaneHud(){
     // At an intersection Cruise ALWAYS disappears, even if OSM has no
     // lane guidance. Only the square HUD may render in this mode.
     renderCruiseGuidance(null);
-    renderLaneAssistance(junctionDetail?.suggestedLanes(),
-      junctionDetail?.laneState());
+    const osmLanes=junctionDetail?.suggestedLanes();
+    const route=selectedRoute();
+    const sim=state.sim;
+    const length=route?.properties?.summary?.lengthInMeters||sim.length;
+    const progress=sim.length?sim.distance/sim.length*length:0;
+    const next=nextManeuverState(
+      route?.properties?.guidance?.instructions||[],progress,length);
+    const provider=(!osmLanes&&next.type==='turn')
+      ?providerTurnLaneHud(upcomingLaneGuidance(
+        tomtomLaneRecords(route),next.instruction,progress,380,next.index))
+      :null;
+    renderLaneAssistance(osmLanes||provider,
+      osmLanes||provider?null:junctionDetail?.laneState());
   }else{
     renderLaneAssistance(null);
     renderCruiseGuidance(junctionDetail?.cruise());
