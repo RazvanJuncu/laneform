@@ -183,7 +183,8 @@ export function createJunctionDetail({
     display:false,forced:null,dismissed:null,
     progress:0,route:null,reason:'not-requested',userZooming:false,
     pendingTimer:null,rollingPendingTimer:null,rollingCache:new Map(),
-    rollingAttempts:0,rollingLastStation:null
+    rollingAttempts:0,rollingLastStation:null,
+    requestStage:'idle',lastOSMError:null
   };
   const map=()=>mapGetter?.();
   const button=()=>buttonGetter?.();
@@ -427,25 +428,29 @@ export function createJunctionDetail({
     clearPending();
     state.lastCall=Date.now();
     state.inflight=true;state.reason='loading';
+    state.requestStage='junction-download';
     const generation=state.generation;
     void (async()=>{
       try{
         const xml=await downloadJunction(next.position);
+        if(generation===state.generation)state.requestStage='junction-reconstruct';
         const data=await reconstruct(xml);
         if(generation!==state.generation)return;
         const cached={data,status:'ready'};
         classifyTarget(next,cached);
         state.cache.set(key,cached);
         if(state.cache.size>MAX_CACHE)state.cache.delete(state.cache.keys().next().value);
-        state.reason='ready';
+        state.reason='ready';state.lastOSMError=null;
       }catch(error){
         if(generation!==state.generation)return;
         state.reason=error?.message||'unavailable';
-        state.cache.set(key,{data:null,status:'unavailable'});
+        state.lastOSMError=String(error?.message||error).slice(0,180);
+        state.cache.set(key,{data:null,status:'unavailable',
+          error:state.lastOSMError});
         console.info('Glide optional junction geometry:',state.reason);
       }finally{
         if(generation===state.generation){
-          state.inflight=false;
+          state.inflight=false;state.requestStage='idle';
           updateAppearance();
           // Data readiness can change while playback is paused. Refresh the
           // same lane guidance shown on the map without waiting for movement.
@@ -501,11 +506,13 @@ export function createJunctionDetail({
     if(!point)return;
     clearRollingPending();
     state.inflight=true;state.lastCall=Date.now();
+    state.requestStage='rolling-download';
     state.rollingAttempts++;
     const generation=state.generation;
     void (async()=>{
       try{
         const xml=await downloadJunction(point,ROLLING_AREA_RADIUS_METERS);
+        if(generation===state.generation)state.requestStage='rolling-reconstruct';
         const data=await reconstruct(xml);
         if(generation!==state.generation)return;
         const corridor=buildLaneCorridor({
@@ -529,13 +536,16 @@ export function createJunctionDetail({
         }));
         state.rollingCache.set(station,{
           data,corridor,throughGuidance:crosses});
+        state.lastOSMError=null;
       }catch(error){
         if(generation!==state.generation)return;
-        state.rollingCache.set(station,{data:null,error:String(error)});
+        state.lastOSMError=String(error?.message||error).slice(0,180);
+        state.rollingCache.set(station,{data:null,
+          error:state.lastOSMError});
         console.info('Glide optional rolling road geometry:',error?.message);
       }finally{
         if(generation===state.generation){
-          state.inflight=false;
+          state.inflight=false;state.requestStage='idle';
           while(state.rollingCache.size>7)
             state.rollingCache.delete(state.rollingCache.keys().next().value);
           onGuidanceChange();
@@ -573,6 +583,33 @@ export function createJunctionDetail({
     updateAppearance();
     ensureRollingPrepared();
   }
+  function getSuggestedLanes(){
+      if(!junctionPhase())return null;
+      const g=activeGuidance();
+      if(!g?.corridor)return null;
+      const ahead=g.offset-state.progress;
+      const instruction=g.kind==='maneuver'
+        ?state.route?.properties?.guidance?.instructions?.[state.target?.index]
+        :null;
+      const maneuver=expectedLaneTurn(instruction);
+      const selectedTurnSide=/left/.test(maneuver||'')?'left':
+        /right/.test(maneuver||'')?'right':null;
+      const frames=g.corridor.laneFrames||[];
+      // The green corridor may have a reliable lane GROUP but no stable
+      // ordinal for its chosen sample. Use several consecutive OSM
+      // cross-sections to supply a count; never invent a road width.
+      const approach=g.corridor.recommendation||
+        stableMappedLaneGroup(frames,g.offset,selectedTurnSide||'through');
+      const exit=g.corridor.exitRecommendation||
+        stableMappedLaneGroup(frames,g.offset,selectedTurnSide||'through',{
+          after:true
+        });
+      const value=twoStageLaneGuidance(approach,exit,ahead,{
+        nearApproach:g.corridor.nearApproachRecommendation,
+        selectedTurnSide
+      });
+      return value?{...value,kind:g.kind}:null;
+  }
   function begin(route){
     state.generation++;
     clearPending();
@@ -582,6 +619,7 @@ export function createJunctionDetail({
     state.display=false;state.inflight=false;
     clearRollingPending();state.rollingCache.clear();
     state.rollingAttempts=0;state.rollingLastStation=null;
+    state.requestStage='idle';state.lastOSMError=null;
     show(map(),false);
     update(0);
   }
@@ -592,6 +630,7 @@ export function createJunctionDetail({
     state.display=false;state.forced=null;state.dismissed=null;
     state.inflight=false;clearRollingPending();
     state.rollingCache.clear();state.rollingLastStation=null;
+    state.requestStage='idle';state.lastOSMError=null;
     show(map(),false);updateButton();
   }
   function toggle(){
@@ -668,36 +707,26 @@ export function createJunctionDetail({
     },
     guidanceMode:()=>junctionPhase()?'junction':'cruise',
     cruise:()=>junctionPhase()?null:cruiseHint(),
-    suggestedLanes:()=>{
-      if(!junctionPhase())return null;
-      const g=activeGuidance();
-      if(!g?.corridor)return null;
-      const ahead=g.offset-state.progress;
-      const instruction=g.kind==='maneuver'
-        ?state.route?.properties?.guidance?.instructions?.[state.target?.index]
-        :null;
-      const maneuver=expectedLaneTurn(instruction);
-      const selectedTurnSide=/left/.test(maneuver||'')?'left':
-        /right/.test(maneuver||'')?'right':null;
-      const frames=g.corridor.laneFrames||[];
-      // The green corridor may have a reliable lane GROUP but no stable
-      // ordinal for its chosen sample. Use several consecutive OSM
-      // cross-sections to supply a count; never invent a road width.
-      const approach=g.corridor.recommendation||
-        stableMappedLaneGroup(frames,g.offset,selectedTurnSide||'through');
-      const exit=g.corridor.exitRecommendation||
-        stableMappedLaneGroup(frames,g.offset,selectedTurnSide||'through',{
-          after:true
-        });
-      const value=twoStageLaneGuidance(approach,exit,ahead,{
-        nearApproach:g.corridor.nearApproachRecommendation,
-        selectedTurnSide
-      });
-      return value?{...value,kind:g.kind}:null;
-    },
+    suggestedLanes:()=>getSuggestedLanes(),
     info:()=>({
       targetCount:state.targets.length,
       ready:!!entry()?.data,
+      targetCacheStatus:entry()?.status||'not-cached',
+      targetError:entry()?.error||null,
+      requestStage:state.requestStage,
+      lastOSMError:state.lastOSMError,
+      cooldownRemainingMs:Math.max(0,COOLDOWN_MS-(Date.now()-state.lastCall)),
+      lanePolygons:entry()?.data?.lanes?.features?.length||
+        [...state.rollingCache.values()].reduce((n,r)=>
+          n+(r.data?.lanes?.features?.length||0),0),
+      mappedLaneFrames:entry()?.corridor?.laneFrames?.length||
+        [...state.rollingCache.values()].reduce((n,r)=>
+          n+(r.corridor?.laneFrames?.length||0),0),
+      hudGuidance:!!getSuggestedLanes(),
+      forcedPreview:!!state.forced,
+      dismissedPreview:state.dismissed===state.target?.id&&!!state.target,
+      viewReason:!map()?.isStyleLoaded?.()?'map-not-ready':
+        state.display?'visible':'standard',
       routeNearbyShapes:entry()?.selection?.summary?.matchedCount||0,
       candidateLanePaths:entry()?.candidates?.features?.length||0,
       ordinalPairs:entry()?.ordinal?.pairs?.length||0,
@@ -728,7 +757,11 @@ export function createJunctionDetail({
         cachedStations:state.rollingCache.size,
         activeStation:state.rollingLastStation,
         readyStations:[...state.rollingCache.entries()]
-          .filter(([,value])=>!!value.data).map(([offset])=>offset)
+          .filter(([,value])=>!!value.data).map(([offset])=>offset),
+        failures:[...state.rollingCache.entries()]
+          .filter(([,value])=>!!value.error).map(([offset,value])=>({
+            offset,message:String(value.error).slice(0,160)
+          }))
       },
       cruiseDiagnostics:{
         loaded:!!entry()?.data,
