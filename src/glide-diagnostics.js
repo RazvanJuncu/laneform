@@ -25,7 +25,9 @@ export function evaluateGlideDiagnostics(info={},context={}){
  else if(info.requesting){cs='pending';cw='OSM download or reconstruction currently running.';}
  else if(fail&&!ready){cs='blocked';cw='Rolling OSM window failed: '+safeError(fail.message);}
  else if(cooldown&&!hasGeometry){cs='waiting';cw='OSM request cooldown: '+cooldown+'s remaining.';}
- else if(!hasGeometry){cs='no-coverage';cw='No prepared OSM road geometry available near this position.';}
+ else if(!hasGeometry){cs='no-coverage';cw=(rolling.requestedStations||0)===0
+  ?'The rolling scanner has not completed an OSM request yet.'
+  :'No reconstructed OSM road geometry is available near this position.';}
  else if(!count){cs='no-lanes';cw='OSM reconstruction produced no usable lane cross-sections.';}
  else {cs='insufficient';cw='Mapped geometry has no confirmed multi-lane choice or stable route-continuity evidence.';}
  let js,jw;
@@ -51,7 +53,9 @@ export function evaluateGlideDiagnostics(info={},context={}){
   routeLength:dist(context.routeLengthMeters),targetCount:info.targetCount||0,
   lanePolygons:info.lanePolygons||0,laneFrames:info.mappedLaneFrames||0,
   explicitTurnPolygons:info.cruiseDiagnostics?.explicitTurnTagPolygons||0,
-  foundStraightCrossings:info.cruiseDiagnostics?.throughCandidates||0,
+  foundStraightCrossings:(info.cruiseDiagnostics?.throughCandidates||0)+
+   (info.cruiseDiagnostics?.rollingThroughCandidates||0),
+  rollingLaneFrames:info.cruiseDiagnostics?.rollingMappedLaneFrames||0,
   corridorStatus:info.corridorStatus||'unavailable',
   corridorSamples:info.corridorSamples||0,
   rollingRequests:rolling.requestedStations||0,rollingReady:(rolling.readyStations||[]).length,
@@ -70,6 +74,10 @@ export function evaluateGlideDiagnostics(info={},context={}){
   scanner:{stage:info.requestStage||'idle',lastError:info.lastOSMError?safeError(info.lastOSMError):null,
    failures:(rolling.failures||[]).slice(0,4).map(x=>({
     station:dist(x.offset),error:safeError(x.message)
+   })),
+   stationEvidence:(rolling.laneFramesPerStation||[]).slice(-7).map(x=>({
+    station:dist(x.offset),frames:x.frames,
+    corridor:x.corridorStatus,crossings:x.throughCrossings
    }))},
   note:'No API keys, precise coordinates, origin/destination, or raw route geometry included.'
  };
