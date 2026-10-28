@@ -57,15 +57,19 @@ const rollingState={...state,target,rollingLastStation:null,
 let prioritized=0,rollingCancelled=0;
 const createRolling=new Function('state','junctionNeedsPriority',
  'junctionCacheKey','clearRollingPending','ensureNextPrepared',
- 'osmTransport',
+ 'osmTransport','nextRollingStation','rollingAreaPoint',
+ 'routeProfile','positionAtDistance','ROLLING_AREA_RADIUS_METERS',
  rollingSource+'\nreturn ensureRollingPrepared;');
 const rolling=createRolling(rollingState,()=>true,
  p=>p.join(','),()=>{rollingCancelled++},()=>{prioritized++},
- {waitMs:()=>0});
+ {waitMs:()=>0,hasCached:()=>false},
+ ()=>4800,()=>[26,44],()=>{},()=>{},190);
 rollingState.progress=4600;rolling();
 assert.equal(prioritized,1,'Imminent junction must take priority over rolling fetch');
 assert.equal(rollingCancelled,1);
 rollingState.progress=0;
+assert.match(rollingSource,/if\(junctionNeedsPriority\(\)\&\&!fromLocal\)/,
+ 'A locally cached Cruise area is not blocked by a remote Junction');
 assert.match(rollingSource,/nextRollingStation\(state.progress,total\)/,
  'Cruise must still scan when the next real turn is far away');
 assert.match(junctionSource,/if\(state.pendingTimer!==null\)return;/,

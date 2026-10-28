@@ -2,6 +2,7 @@
 // effort. Fail over on the NEXT scheduled scan, never make a burst of retries.
 import {smallAreaOverpassQuery,MAX_OSM_BYTES,validateOsmXML}
   from './street-geometry-adapter.js';
+import {createGeometryAreaCache} from './geometry-area-cache.js';
 
 export const GEOMETRY_ENDPOINTS=Object.freeze([
   {name:'Private.coffee',url:'https://overpass.private.coffee/api/interpreter'},
@@ -15,7 +16,8 @@ function transportError(kind,message){
 export function createOsmGeometryTransport({
   endpoints=GEOMETRY_ENDPOINTS,fetchImpl=fetch,
   now=()=>Date.now(),timeoutMs=20000,
-  failureBackoffMs=120000,rateLimitBackoffMs=180000
+  failureBackoffMs=120000,rateLimitBackoffMs=180000,
+  cache=createGeometryAreaCache()
 }={}){
   if(!Array.isArray(endpoints)||!endpoints.length)
     throw Error('At least one OSM geometry source is required');
@@ -25,9 +27,12 @@ export function createOsmGeometryTransport({
   const health=()=>({
     source:endpoints[preferred].name,consecutiveFailures,
     pauseRemainingMs:waitMs(),lastError,
-    successfulRequests,failedRequests
+    successfulRequests,failedRequests,
+    localCache:cache.stats()
   });
   async function download(center,radiusMeters=135){
+    const local=cache.get(center,radiusMeters);
+    if(local)return local; // No network, even during shared cooldown/backoff.
     if(waitMs()>0)throw transportError('backoff',
       'OSM sources resting after errors; retry later');
     const source=endpoints[preferred];
@@ -84,5 +89,11 @@ export function createOsmGeometryTransport({
       throw transportError(kind,message);
     }finally{clearTimeout(timer);}
   }
-  return {download,waitMs,health};
+  return {
+    download,waitMs,health,
+    ready:cache.ready,isReady:cache.isReady,
+    hasCached:cache.has,
+    // Called only after osm2streets successfully reconstructs this XML.
+    storeVerified:cache.put,invalidate:cache.remove
+  };
 }
