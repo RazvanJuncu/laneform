@@ -29,6 +29,16 @@ const cooldown=evaluateGlideDiagnostics({...basic,
 assert.equal(cooldown.sections[0].status,'waiting');
 assert.match(cooldown.sections[0].reason,/13s/);
 assert.equal(cooldown.sections[1].status,'no-target');
+const farTurn=evaluateGlideDiagnostics({...basic,
+  guidanceMode:'cruise',
+  targetOffsetMeters:5600,progressMeters:200,
+  distanceToTargetMeters:5400,junctionPrefetchLookaheadMeters:850
+},context);
+assert.equal(farTurn.sections[1].status,'distant',
+  'A turn more than 5km away is intentionally NOT awaiting OSM');
+assert.match(farTurn.sections[1].reason,/deferred until 850 m/);
+assert.equal(farTurn.sections[0].status,'no-coverage');
+
 const cruise=evaluateGlideDiagnostics({...basic,
   guidanceMode:'cruise',cruiseGuidance:{
     source:'glide',mode:'continuity',laneCount:3,selected:[1]
