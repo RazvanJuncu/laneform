@@ -24,7 +24,7 @@ export function evaluateGlideDiagnostics(info={},context={}){
  else if(cruise?.laneCount>1){cs='ready';cw=cruise.mode==='turn-only'?'Explicit OSM through/turn-only evidence.'
   :cruise.mode==='continuity'?'Mapped lane continuity shows a lane diverging.'
   :cruise.mode==='alignment'?'Inferred alignment for next routed turn.'
-  :cruise.mode==='available'?'Unverified driver-side preference from stable mapped lane count; lane continuity remains unknown.'
+  :cruise.mode==='available'?'Mapped lane count only; no route-valid lane is established.'
   :'Mapped lanes present, but no reliable selection established.';}
  else if(info.requesting){cs='pending';cw='OSM download or reconstruction currently running.';}
  else if(fail&&!ready){cs='blocked';cw='Rolling OSM window failed: '+safeError(fail.message);}
@@ -48,7 +48,11 @@ export function evaluateGlideDiagnostics(info={},context={}){
  else {js='hidden';jw='Geometry available but Junction Detail currently hidden; inspect distance/zoom/dismissal.';}
  let ls,lw;
  if(phase!=='junction'){ls='inactive';lw='Square lane guidance runs only in junction phase.';}
- else if(info.hudGuidance){ls='ready';lw='A multi-lane approach or exit selection is available.';}
+ else if(info.hudGuidance||context.providerLanesAvailable){
+  ls='ready';lw=info.hudGuidance
+    ?'OSM mapped approach lane selection; geometric reconstruction is provisional.'
+    :'TomTom route lane recommendation is available without another API request.';
+}
  else if(!info.ready){ls='waiting';lw='Waiting for mapped junction lane geometry.';}
  else if(info.corridorStatus!=='provisional'){ls='blocked';lw='Lane corridor failed: '+(info.corridorReason||'insufficient OSM metadata');}
  else {ls='insufficient';lw='Corridor exists but no supported 2+ lane recommendation was produced.';}
@@ -67,6 +71,8 @@ export function evaluateGlideDiagnostics(info={},context={}){
     ?cruise.selected.map(i=>i+1).join(', ')||'none':'none',
   cruiseConfidence:cruise?.confidence||cruise?.status||'none',
   junctionGeometrySource:info.ready?info.geometrySource||'unknown':'not-ready',
+  activeLaneGuidanceSource:info.hudGuidance?'osm2streets':
+    context.providerLanesAvailable?'tomtom-route':'none',
   cachedJunctionReuses:info.reusedJunctions||0,
   reusedFromStation:dist(info.reusedFromStation),
   rollingRequests:rolling.requestedStations||0,rollingReady:(rolling.readyStations||[]).length,
