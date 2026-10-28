@@ -123,6 +123,7 @@
     <div class="nav-actions">
       <button id="navPlay" type="button" class="start-button">Play</button>
       <button id="navFollow" type="button" class="minimal-control selected" aria-pressed="true">Follow</button>
+      <button id="navDiagnostics" type="button" class="minimal-control">Diagnostics</button>
       <button id="navExit" type="button" class="minimal-control">Exit</button>
     </div>
     <details class="simulation-details">
@@ -149,7 +150,14 @@
   </button>
 
   <section id="settingsPanel" class="settings-panel sheet" aria-label="Preferences" hidden>
-    <div class="settings-head"><strong>Preferences</strong><button id="settingsClose" class="bare-icon" type="button" aria-label="Close settings">×</button></div>
+    <div class="settings-head">
+      <div class="settings-tabs" role="tablist" aria-label="Glide settings and diagnostics">
+        <button id="preferencesTab" role="tab" aria-selected="true" aria-controls="preferencesContent" type="button">Preferences</button>
+        <button id="diagnosticsTab" role="tab" aria-selected="false" aria-controls="diagnosticsContent" type="button">Diagnostics</button>
+      </div>
+      <button id="settingsClose" class="bare-icon" type="button" aria-label="Close panel">×</button>
+    </div>
+    <div id="preferencesContent" role="tabpanel" aria-labelledby="preferencesTab">
     <label for="apiKey">TomTom routing key</label>
     <div class="key-entry">
       <input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="API key">
@@ -161,8 +169,25 @@
     <details class="developer-details"><summary>Technical details</summary>
       <p id="usageCounter">0 searches · 0 routes this tab</p>
       <p id="laneCoverage">Lane data: shown after a route is calculated</p>
-      <p>Map tiles use OpenFreeMap. In route simulation, Glide requests a small OpenStreetMap extract for the next routed junction, caches it, and reconstructs geometry locally. The public OSM API may be unavailable. No lane model is verified for driving.</p>
+      <p>Map tiles use OpenFreeMap. Lane geometry is provisional and is not verified for driving.</p>
     </details>
+    </div>
+    <div id="diagnosticsContent" class="diagnostics-content" role="tabpanel" aria-labelledby="diagnosticsTab" hidden>
+      <p class="diagnostics-intro">Live, read-only checks. Shows why Cruise, intersection preview and lane guidance do or don't appear.</p>
+      <div id="diagnosticsSummary" class="diagnostics-summary" aria-live="polite">No simulation active.</div>
+      <div id="diagnosticsSections" class="diagnostics-sections"></div>
+      <details class="diagnostics-technical" open>
+        <summary>OSM pipeline &amp; counters</summary>
+        <dl id="diagnosticsCounters" class="diagnostics-counters"></dl>
+        <p id="diagnosticsScanner" class="diagnostics-scan"></p>
+      </details>
+      <div class="diagnostics-footer">
+        <button id="diagnosticsRefresh" type="button">Refresh</button>
+        <button id="diagnosticsCopy" type="button">Copy report</button>
+      </div>
+      <p id="diagnosticsCopyStatus" class="diagnostics-copy-state" role="status" aria-live="polite"></p>
+      <p class="diagnostics-privacy">No extra API requests. The copied report excludes API keys, coordinates, and destination details.</p>
+    </div>
   </section>
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
