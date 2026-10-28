@@ -33,6 +33,36 @@ https://razvanjuncu.github.io/laneform/
 
 If needed, go to **Settings → Pages → Build and deployment**, select **GitHub Actions**.
 
+## Junction preview vs Cruise: straight roads and request priority
+
+Only **actionable route maneuvers** become Junction Detail targets.
+Provider `STRAIGHT`, `CONTINUE` and departure-style instructions no
+longer trigger the zoomed intersection preview or the misleading
+`Approach / After junction` square lane rows. Those crossing geometries
+remain available to **Cruise** to anticipate turn-only lane restrictions
+and lane-continuity changes. Ordinary street crossings do not need to
+hide Cruise as if the driver were turning.
+
+The next genuine routed turn can be shown by the ordinary nav bar from
+many kilometres away, but dedicated Junction Detail OSM downloading is
+now deliberately deferred until **850 m** before that maneuver. It
+takes priority over a new rolling Cruise scan within that range. One
+pending cooldown timer survives animation updates; repeated position
+frames do not reset its waiting period. Cruise still samples the road
+between distant turns. This avoids spending the shared 30-second
+cooldown on an intersection many kilometres away.
+
+If the route preview says `Turn right in 5.4 km`, that message does not
+justify a junction diagram or suppress Cruise at intervening straight
+crossings. A Cruiser lane preference must be justified independently
+by the current reconstructed road and its lookahead, not the remote turn.
+Diagnostics describes a distant maneuver as `distant` with prefetch
+deferred, rather than misleadingly calling it `waiting`.
+
+Tests:
+`scripts/check-junction-request-priority.mjs`,
+`scripts/check-junction-scheduler.mjs`.
+
 ## Reusing OSM reconstruction before the cooldown
 
 Junction Detail now inspects all currently cached Cruise rolling windows
