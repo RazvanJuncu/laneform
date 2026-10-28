@@ -228,9 +228,25 @@ These are inferred previews, not legally verified driving instructions.
 
 Between intersections, Cruise wakes up for a stable mapped multi-lane
 section or a new lane appearing up the road, even when no turn-only
-restriction is mapped; in that case **no oval is selected**, because lane
-count alone does not prove which lane is preferable. Confirmed-looking
-lane highlights require stronger tag, continuity, or route-alignment data.
+restriction is mapped. The previous fallback displayed unselected oval
+lane markers (`selected: []`) even when the driver needed a choice.
+Cruise now highlights a clearly labeled **driver-default heuristic**:
+in right-hand-driving Romania, prefer the rightmost lane in ordinary
+cruise, or the leftmost/rightmost lane in advance of the next routed
+left/right turn (within 680 m). This heuristic is **not** proof that
+the selected lane is legally valid for an upcoming through-junction.
+When the highlighted lane exists only *after a widening*, the status
+explicitly reads `After widening`, not as if the driver is already in
+that lane. A stable 2+ directional lane group is still required; the
+application does not manufacture lane counts on one-lane roads.
+
+Stronger evidence takes precedence: explicitly OSM-tagged through lanes
+and proven lane peel-off geometry are considered before the default
+heuristic. When OSM shows multiple through-capable lanes without a
+subsequent turn preference, Cruise may light **two valid-through ovals**
+instead of arbitrarily selecting only one. Diagnostics records the
+actual selected lane numbers, Cruise mode, and heuristic confidence.
+The driver must always follow the actual road signs and markings.
 
 Simulation Controls now offer a **0.5× to 15× playback-speed slider**,
 with **7×** matching the earlier default. The nominal 1× pace is 45 km/h;
@@ -291,7 +307,7 @@ choice or a credible upcoming widening. There is no Cruise display on a
 single-lane road with no upcoming lane choice, and no persistent
 `Monitoring` placeholder when lane geometry is unavailable.
 
-Cruise has **two distinguishable levels**. First it uses existing
+Cruise has **separate evidence levels**. First it uses existing
 reconstructed OSM `allowed_turns` markings at nearby straight-through
 junctions (within a 360m horizon). If the same mapped directional road has
 both explicitly through-capable and turn-only lanes, it highlights a
