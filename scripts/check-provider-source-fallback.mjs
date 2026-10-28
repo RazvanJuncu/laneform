@@ -30,8 +30,10 @@ const url=new URL(smallAreaOverpassUrl([26.06,44.43],130));
 assert.equal(url.origin,'https://overpass-api.de');
 const q=url.searchParams.get('data');
 assert.match(q,/\[out:xml\]/);
-assert.match(q,/way\(44\./);
-assert.match(q,/node\(44\./);
+assert.match(q,/way\["highway"\]\(44\./);
+assert.match(q,/\._;>;\);out body;/);
+assert.ok(!q.includes('node('),
+ 'Road data must avoid downloading every unrelated POI node');
 assert.match(q,/out body;/);
 assert.ok(smallAreaOsmUrl([26.06,44.43],130).includes('bbox='),
   'Preserve the legacy bbox utility for tests and export tools');
