@@ -21,6 +21,21 @@ export function smallAreaOsmUrl(center, radiusMeters=165){
   return 'https://api.openstreetmap.org/api/0.6/map?bbox='+
     bbox.map(x=>x.toFixed(6)).join(',');
 }
+// Read-only OSM query provider. Overpass is intended for extracting map data;
+// the central OSM editing API should not be a continuous read source.
+// One small area per scheduled slot; no fallback cascade on HTTP 429/504.
+export function smallAreaOverpassUrl(center,radiusMeters=165){
+  const bbox=new URL(smallAreaOsmUrl(center,radiusMeters))
+    .searchParams.get('bbox').split(',').map(Number);
+  const [west,south,east,north]=bbox;
+  const box=[south,west,north,east].map(v=>v.toFixed(6)).join(',');
+  // Fetch mapped ways and their referenced nodes, plus tagged nodes in
+  // the region. The OSM XML output is compatible with osm2streets.
+  const query='[out:xml][timeout:14];'+
+    '(way('+box+');node('+box+'););(._;>;);out body;';
+  return 'https://overpass-api.de/api/interpreter?data='+
+    encodeURIComponent(query);
+}
 export function validateOsmXML(xml){
   if(typeof xml!=='string'||!/<osm(?:\s|>)/i.test(xml.slice(0,1200)))
     throw Error('Import a complete .osm XML extract, not GeoJSON or an OSM link.');
