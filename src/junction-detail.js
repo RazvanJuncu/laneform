@@ -278,12 +278,32 @@ export function createJunctionDetail({
       a.distanceToJunction-b.distanceToJunction);
     return available[0]||null;
   }
+  function visualLaneGuidance(){
+    const maneuver=activeGuidance();
+    const turnDistance=maneuver?.offset-state.progress;
+    // When a real turn approaches, its lane corridor owns the map.
+    if(Number.isFinite(turnDistance)&&turnDistance<=380&&
+      turnDistance>=-35)return maneuver;
+    // Straight crossings can still have a provisional green trajectory
+    // from the already-cached Cruise OSM area. They must NOT open a
+    // dedicated zoomed intersection or two-stage approach/exit HUD.
+    const crossing=cachedThroughCrossings().find(t=>
+      t.corridor?.status==='provisional'&&
+      (t.corridor.path?.features?.length||0)>0&&
+      t.offset-state.progress<=225&&
+      t.offset-state.progress>=-30);
+    if(crossing)return {
+      kind:'through',offset:crossing.offset,corridor:crossing.corridor
+    };
+    return maneuver;
+  }
   function usableTrajectory(){
-    if(!state.route||!state.target)return null;
-    const remaining=state.target.offset-state.progress;
+    if(!state.route)return null;
+    const selected=visualLaneGuidance();
+    const remaining=selected?.offset-state.progress;
     if(!Number.isFinite(remaining)||remaining>700||remaining< -35)
       return null;
-    const corridor=activeGuidance()?.corridor;
+    const corridor=selected?.corridor;
     if(corridor?.status!=='provisional')return null;
     const features=corridor.path?.features||[];
     if(!features.length||features.length!==corridor.coverage?.length)
@@ -812,6 +832,7 @@ export function createJunctionDetail({
         corridorStatus:t.corridor?.status||'unavailable'
       }))||[],
       activeGuidanceKind:activeGuidance()?.kind||null,
+      visualTrajectoryKind:visualLaneGuidance()?.kind||null,
       guidanceMode:junctionPhase()?'junction':'cruise',
       cruiseGuidance:cruiseHint(),
       rollingCoverage:{
