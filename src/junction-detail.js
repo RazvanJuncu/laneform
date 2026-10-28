@@ -649,6 +649,9 @@ export function createJunctionDetail({
       if(maneuver==='through')return null;
       const selectedTurnSide=/left/.test(maneuver||'')?'left':
         /right/.test(maneuver||'')?'right':null;
+      // KEEP/MERGE/unknown are not safe to translate into a guessed
+      // before/after lane change. They require directional mapping first.
+      if(!selectedTurnSide)return null;
       const frames=g.corridor.laneFrames||[];
       // The green corridor may have a reliable lane GROUP but no stable
       // ordinal for its chosen sample. Use several consecutive OSM
@@ -739,7 +742,9 @@ export function createJunctionDetail({
     position:()=>state.target?.position||null,
     currentTarget:()=>state.target,
     laneState:()=>{
-      if(!state.display||!state.target)return null;
+      // The junction phase begins before geometry necessarily arrives.
+      // Report loading/unavailable even when the enlarged map is not open.
+      if(!junctionPhase()||!state.target)return null;
       if(activeGuidance()?.kind==='through' ||
         expectedLaneTurn(state.route?.properties?.guidance?.
           instructions?.[state.target.index])==='through')return null;
