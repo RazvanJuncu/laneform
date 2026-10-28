@@ -141,6 +141,7 @@ function diagnosticSnapshotNow(){
     simPlaying:state.sim.playing,
     routeLengthMeters:route?.properties?.summary?.lengthInMeters,
     playbackRate:state.sim.playbackRate,
+    providerLanesAvailable:!!cachedProviderTurnLanes(),
     version:GLIDE_BUILD_SHA.slice(0,7)
   });
 }
@@ -1120,7 +1121,8 @@ function renderLaneAssistance(laneData,laneState=null){
     rail.setAttribute('aria-label',label+': '+group.laneCount+
       ' driving lanes, '+group.selected.map(i=>
         'lane '+(i+1)+' of '+group.laneCount).join(' and ')+
-      ' highlighted (inferred from OSM).'+
+      ' highlighted '+(providerFallback?
+        '(TomTom route guidance).':'(inferred from OSM).')+
       (Array.isArray(group.addedLaneIndices)&&group.addedLaneIndices.length
         ?' Newly opening lanes: '+group.addedLaneIndices.map(i=>i+1).join(', ')+'.'
         :''));
@@ -1238,22 +1240,23 @@ function navCamera(p,immediate=false){
     padding,duration:immediate?MOTION:(isReducedMotion ? 0 : 980)
   });
 }
+function cachedProviderTurnLanes(){
+  if(!state.sim.active||!junctionDetail?.currentTarget())return null;
+  const route=selectedRoute(),target=junctionDetail.currentTarget();
+  const length=route?.properties?.summary?.lengthInMeters;
+  if(!route||!Number.isFinite(length)||!state.sim.length)return null;
+  const progress=state.sim.distance/state.sim.length*length;
+  const instruction=route.properties?.guidance?.instructions?.[target.index];
+  return providerTurnLaneHud(upcomingLaneGuidance(
+    tomtomLaneRecords(route),instruction,progress,380,target.index));
+}
 function renderNavigationLaneHud(){
   if(junctionDetail?.guidanceMode()==='junction'){
     // At an intersection Cruise ALWAYS disappears, even if OSM has no
     // lane guidance. Only the square HUD may render in this mode.
     renderCruiseGuidance(null);
     const osmLanes=junctionDetail?.suggestedLanes();
-    const route=selectedRoute();
-    const sim=state.sim;
-    const length=route?.properties?.summary?.lengthInMeters||sim.length;
-    const progress=sim.length?sim.distance/sim.length*length:0;
-    const next=nextManeuverState(
-      route?.properties?.guidance?.instructions||[],progress,length);
-    const provider=(!osmLanes&&next.type==='turn')
-      ?providerTurnLaneHud(upcomingLaneGuidance(
-        tomtomLaneRecords(route),next.instruction,progress,380,next.index))
-      :null;
+    const provider=osmLanes?null:cachedProviderTurnLanes();
     renderLaneAssistance(osmLanes||provider,
       osmLanes||provider?null:junctionDetail?.laneState());
   }else{
