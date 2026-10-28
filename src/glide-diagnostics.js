@@ -23,7 +23,9 @@ export function evaluateGlideDiagnostics(info={},context={}){
  else if(phase==='junction'){cs='suppressed';cw='Junction mode deliberately hides Cruise, even if Suggested Lanes is unavailable.';}
  else if(cruise?.laneCount>1){cs='ready';cw=cruise.mode==='turn-only'?'Explicit OSM through/turn-only evidence.'
   :cruise.mode==='continuity'?'Mapped lane continuity shows a lane diverging.'
-  :cruise.mode==='alignment'?'Inferred alignment for next routed turn.':'Multiple mapped lanes; no supported preferred lane.';}
+  :cruise.mode==='alignment'?'Inferred alignment for next routed turn.'
+  :cruise.mode==='available'?'Unverified driver-side preference from stable mapped lane count; lane continuity remains unknown.'
+  :'Mapped lanes present, but no reliable selection established.';}
  else if(info.requesting){cs='pending';cw='OSM download or reconstruction currently running.';}
  else if(fail&&!ready){cs='blocked';cw='Rolling OSM window failed: '+safeError(fail.message);}
  else if(cooldown&&!hasGeometry){cs='waiting';cw='OSM request cooldown: '+cooldown+'s remaining.';}
@@ -60,6 +62,10 @@ export function evaluateGlideDiagnostics(info={},context={}){
   rollingLaneFrames:info.cruiseDiagnostics?.rollingMappedLaneFrames||0,
   corridorStatus:info.corridorStatus||'unavailable',
   corridorSamples:info.corridorSamples||0,
+  cruiseMode:cruise?.mode||'none',
+  cruiseSelected:Array.isArray(cruise?.selected)
+    ?cruise.selected.map(i=>i+1).join(', ')||'none':'none',
+  cruiseConfidence:cruise?.confidence||cruise?.status||'none',
   junctionGeometrySource:info.ready?info.geometrySource||'unknown':'not-ready',
   cachedJunctionReuses:info.reusedJunctions||0,
   reusedFromStation:dist(info.reusedFromStation),
