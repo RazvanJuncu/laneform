@@ -92,26 +92,26 @@ const widthCue=cruiseFromAvailableLanes({
 });
 assert.equal(widthCue.mode,'available');
 assert.equal(widthCue.laneCount,2);
-assert.deepEqual(widthCue.selected,[1],
-  'Without stronger evidence Cruise gives a clearly labeled right-hand driving heuristic');
-assert.equal(widthCue.confidence,'heuristic');
+assert.deepEqual(widthCue.selected,[],
+  'Mapped width alone must never highlight an unverified driving lane');
+assert.equal(widthCue.confidence,'unverified');
 assert.equal(widthCue.timing,'upcoming',
   'Do not imply the additional lane is already beneath the vehicle');
-assert.match(widthCue.reason,/Unverified/);
+assert.match(widthCue.reason,/unverified/);
 const prepareLeft=cruiseFromAvailableLanes({
   laneFrames:becomesTwo,progress:90,
   nextTurnOffset:500,nextTurnDirection:'left'
 });
-assert.deepEqual(prepareLeft.selected,[0],
-  'Prepare left ahead of a left maneuver when only stable geometry exists');
+assert.deepEqual(prepareLeft.selected,[],
+  'A distant left turn does not establish current lane validity');
 assert.equal(prepareLeft.preferredSide,'left');
 const currentlyMulti=cruiseFromAvailableLanes({
   laneFrames:frames([[-3,1,5],[-3,1,5],[-3,1,5]],{start:86}),
   progress:90
 });
 assert.equal(currentlyMulti.timing,'current');
-assert.deepEqual(currentlyMulti.selected,[2],
-  'With no nearer turn or disqualifying data the rightmost lane is the unverified default');
+assert.deepEqual(currentlyMulti.selected,[],
+  'A mapped three-lane section does not imply the rightmost is route-valid');
 assert.ok(widthCue.distanceToJunction>0);
 assert.equal(cruiseFromAvailableLanes({
   laneFrames:frames([[-2],[-2],[-2]]),progress:90
