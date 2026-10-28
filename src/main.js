@@ -5,6 +5,7 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import mapStyle from './glide-map-style.json';
 import { splitPathByDistance } from './route-progress.js';
 import { extractRouteLaneGuidance, upcomingLaneGuidance } from './lane-assist.js';
+import {providerTurnLaneHud} from './provider-lane-fallback.js';
 import { nextManeuverState, arrivalApproachText } from './maneuver-guidance.js';
 import {DEFAULT_SIM_RATE,simulationPlaybackRate,
   simulationMetersPerSecond,simulationSpeedLabel} from './simulation-speed.js';
@@ -140,6 +141,7 @@ function diagnosticSnapshotNow(){
     simPlaying:state.sim.playing,
     routeLengthMeters:route?.properties?.summary?.lengthInMeters,
     playbackRate:state.sim.playbackRate,
+    providerLanesAvailable:!!cachedProviderTurnLanes(),
     version:GLIDE_BUILD_SHA.slice(0,7)
   });
 }
@@ -1079,9 +1081,12 @@ function renderLaneAssistance(laneData,laneState=null){
   const panel=$('laneGuidance');
   panel.replaceChildren();
   panel.hidden=true;
-  // Both rows use the same OSM lane samples as the green route. Never mix
-  // independently inferred HUD arrows from TomTom with Glide's trajectory.
-  if(laneData?.source!=='glide'||laneData.status!=='inferred'||
+  // OSM gives detailed geometry; TomTom can supply a separate, clearly
+  // attributed single-stage route lane recommendation with zero new calls.
+  const providerFallback=laneData?.source==='tomtom'&&
+    laneData.status==='provider-recommendation';
+  if((!providerFallback&&(laneData?.source!=='glide'||
+    laneData?.status!=='inferred'))||
     !Number.isInteger(laneData.laneCount)||laneData.laneCount<1||
     laneData.laneCount>9||!Array.isArray(laneData.selected)||
     !laneData.selected.length){
@@ -1116,7 +1121,8 @@ function renderLaneAssistance(laneData,laneState=null){
     rail.setAttribute('aria-label',label+': '+group.laneCount+
       ' driving lanes, '+group.selected.map(i=>
         'lane '+(i+1)+' of '+group.laneCount).join(' and ')+
-      ' highlighted (inferred from OSM).'+
+      ' highlighted '+(providerFallback?
+        '(TomTom route guidance).':'(inferred from OSM).')+
       (Array.isArray(group.addedLaneIndices)&&group.addedLaneIndices.length
         ?' Newly opening lanes: '+group.addedLaneIndices.map(i=>i+1).join(', ')+'.'
         :''));
@@ -1143,12 +1149,12 @@ function renderLaneAssistance(laneData,laneState=null){
   const info=document.createElement('span');
   info.className='lane-source';
   const ahead=Number(laneData.distanceToManeuver);
-  info.textContent='Suggested lanes · '+
+  info.textContent=(providerFallback?'Suggested turn lanes · ':'Suggested lanes · ')+
     (laneData.kind==='through'?'continue straight · ':'')+
     (Number.isFinite(ahead)?distance(Math.max(0,ahead))+' ahead · ':'')+
-    'Glide (inferred)';
+    (providerFallback?'TomTom route guidance':'Glide (inferred)');
   panel.append(info,approach);
-  const after=laneRow(laneData.exit,'After junction');
+  const after=providerFallback?null:laneRow(laneData.exit,'After junction');
   if(after)panel.append(after);
   panel.hidden=false;
 }
@@ -1173,14 +1179,11 @@ function renderCruiseGuidance(cue){
   note.className='cruise-status';
   const distanceText=distance(Math.max(0,cue.distanceToJunction));
   if(cue.mode==='available'){
-    // This oval is a low-confidence DRIVING PREFERENCE, not proof a
-    // particular lane remains legally available through an intersection.
-    const side=cue.preferredSide==='left'?'left':'right';
-    const upcoming=cue.timing==='upcoming';
-    note.textContent=upcoming
-      ?'After widening · prefer '+side+' · '+distanceText
-      :cue.preferredSide==='left'
-        ?'Prefer left · inferred':'Keep right · inferred';
+    // Mapping lane count does not establish through-lane validity.
+    // Never paint a default preference as though it were route guidance.
+    note.textContent=cue.timing==='upcoming'
+      ?'Lanes mapped ahead · choice unverified · '+distanceText
+      :'Lanes mapped · no verified choice';
   }else{
     note.textContent=(cue.mode==='alignment'
       ?'Align for next turn · '
@@ -1198,7 +1201,7 @@ function renderCruiseGuidance(cue){
   rail.setAttribute('aria-label',
     cue.laneCount+' mapped lanes; '+selectedText+
     (cue.mode==='available'
-      ?' (heuristic preference only; not verified through access).'
+      ?' (road width only; no lane recommendation inferred).'
       :cue.mode==='alignment'
         ?' (geometric alignment only, earlier turn restrictions unknown).'
         :cue.mode==='continuity'
@@ -1214,8 +1217,7 @@ function renderCruiseGuidance(cue){
   }
   panel.append(note,rail);
   panel.title=cue.mode==='available'
-    ?'Inferred driver-style '+(cue.preferredSide||'right')+
-      ' lane preference, not verified lane continuity or legal turn access.'
+    ?'Mapped lanes only; no verified lane continuity, turn restrictions or recommended driving lane.'
     :cue.mode==='alignment'
       ?'Geometric lane alignment for the next routed turn. No turn-only restrictions verified.'
       :cue.mode==='continuity'
@@ -1238,19 +1240,39 @@ function navCamera(p,immediate=false){
     padding,duration:immediate?MOTION:(isReducedMotion ? 0 : 980)
   });
 }
-function renderNavigationLaneHud(){
-  if(junctionDetail?.guidanceMode()==='junction'){
+function cachedProviderTurnLanes(){
+  if(!state.sim.active||!junctionDetail?.currentTarget())return null;
+  const route=selectedRoute(),target=junctionDetail.currentTarget();
+  const length=route?.properties?.summary?.lengthInMeters;
+  if(!route||!Number.isFinite(length)||!state.sim.length)return null;
+  const progress=state.sim.distance/state.sim.length*length;
+  const instruction=route.properties?.guidance?.instructions?.[target.index];
+  return providerTurnLaneHud(upcomingLaneGuidance(
+    tomtomLaneRecords(route),instruction,progress,380,target.index));
+}
+function renderNavigationLaneHud(force=false){
+  const mode=junctionDetail?.guidanceMode();
+  const now=Date.now();
+  // Avoid rebuilding the entire lane DOM at simulation frame rate.
+  // Phase changes, manual scrubbing and newly loaded data render instantly.
+  if(!force&&renderNavigationLaneHud.lastMode===mode&&
+    now-(renderNavigationLaneHud.lastAt||0)<220)return;
+  renderNavigationLaneHud.lastMode=mode;
+  renderNavigationLaneHud.lastAt=now;
+  if(mode==='junction'){
     // At an intersection Cruise ALWAYS disappears, even if OSM has no
     // lane guidance. Only the square HUD may render in this mode.
     renderCruiseGuidance(null);
-    renderLaneAssistance(junctionDetail?.suggestedLanes(),
-      junctionDetail?.laneState());
+    const osmLanes=junctionDetail?.suggestedLanes();
+    const provider=osmLanes?null:cachedProviderTurnLanes();
+    renderLaneAssistance(osmLanes||provider,
+      osmLanes||provider?null:junctionDetail?.laneState());
   }else{
     renderLaneAssistance(null);
     renderCruiseGuidance(junctionDetail?.cruise());
   }
 }
-function navHud(){
+function navHud(forceLaneHud=false){
   const sim=state.sim,route=selectedRoute();
   if(!sim.active||!route)return;
   const summary=route.properties?.summary||{};
@@ -1277,7 +1299,7 @@ function navHud(){
   // Junction Detail and the mini lane HUD share the *same* geometry-based
   // sample. Geometry readiness is asynchronous; only show known samples.
   junctionDetail?.update(offset);
-  renderNavigationLaneHud();
+  renderNavigationLaneHud(forceLaneHud);
   renderDiagnostics(false);
 }
 function positionSim(meters,forceCamera=false){
@@ -1287,7 +1309,7 @@ function positionSim(meters,forceCamera=false){
   const p=along(sim.distance);
   if(!p)return;
   sim.marker?.setLngLat(p.point).setRotation(p.angle);
-  navHud();
+  navHud(!sim.playing);
   if(sim.follow)navCamera(p,forceCamera);
   requestDraw(); // update the muted traveled route even when camera following is off
   if(sim.distance>=sim.length)pauseSim();
@@ -1441,7 +1463,7 @@ function attachEvents() {
       // Geometry frequently arrives while the user has playback PAUSED.
       // Redraw the route canvas immediately, not just the compact HUD.
       requestDraw();
-      if(state.sim.active)renderNavigationLaneHud();
+      if(state.sim.active)renderNavigationLaneHud(true);
       renderDiagnostics(true);
     },
     onButtonAction:()=>{

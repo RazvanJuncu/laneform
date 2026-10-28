@@ -2,6 +2,16 @@
 // Advance a 300 m route-distance grid, reusing the reconstruction for all
 // progress ticks within each window. The chosen center looks 140-440 m ahead.
 // The caller applies its existing ≥30s OSM API cooldown and cache.
+// A remote maneuver should not starve the first local Cruise scan.
+// Within ~680m, favor Junction Detail to leave time for the public OSM
+// cooldown; farther ahead, scan the local road first and then re-use its XML.
+export function prioritizeJunctionDownload({
+  aheadMeters,rollingStation=null,rollingCached=false,
+  urgentMeters=680
+}={}){
+  if(!Number.isFinite(aheadMeters))return false;
+  return aheadMeters<=urgentMeters||rollingStation===null||rollingCached;
+}
 export const ROLLING_STEP_METERS=300;
 export const ROLLING_AREA_RADIUS_METERS=190;
 export function nextRollingStation(progress,total,{
