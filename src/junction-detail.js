@@ -84,7 +84,10 @@ async function downloadJunction(position,radiusMeters=135){
   const aborter=new AbortController();
   const timer=setTimeout(()=>aborter.abort(),12000);
   try{
-    const response=await fetch(url,{signal:aborter.signal,credentials:'omit'});
+    // Overpass public endpoint requires a browser referrer. Share only the
+    // Glide origin, never the route path or user coordinates as a referrer.
+    const response=await fetch(url,{signal:aborter.signal,
+      credentials:'omit',referrerPolicy:'origin'});
     if(!response.ok)throw Error('Overpass HTTP '+response.status);
     const bytes=Number(response.headers.get('content-length'));
     if(bytes>MAX_OSM_BYTES)throw Error('Overpass area too large');
