@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {isJunctionPhase} from '../src/lane-junction-policy.js';
+import {isPreviewManeuver} from '../src/junction-logic.js';
 const source=readFileSync(new URL('../src/junction-detail.js',import.meta.url),'utf8');
 const a=source.indexOf('  function activeGuidance(){');
 const b=source.indexOf('  function cruiseHint(){',a);
@@ -10,7 +11,11 @@ assert.ok(a>=0&&b>a&&s>=0&&end>s);
 assert.ok(!source.slice(a,b).includes('cachedThroughCrossings()'),
  'A straight OSM crossing must not become a second turn-preview phase');
 const state={
- route:{properties:{guidance:{instructions:[]}}},
+ route:{properties:{guidance:{instructions:[
+   {maneuver:'TURN_RIGHT',message:'Turn right'},
+   {maneuver:'CONTINUE',message:'Continue straight'},
+   {maneuver:'KEEP_RIGHT',message:'Keep right'}
+ ]}}},
  target:{index:0,offset:5600},
  progress:200,rollingCache:new Map()
 };
@@ -20,16 +25,31 @@ const entry=()=>({corridor:{status:'provisional',
  laneFrames:[]},
  throughGuidance:[{offset:280,kind:'through'}]});
 const model=new Function('state','entry','isJunctionPhase',
- 'expectedLaneTurn','stableMappedLaneGroup','twoStageLaneGuidance',
+ 'isPreviewManeuver','expectedLaneTurn','stableMappedLaneGroup',
+ 'twoStageLaneGuidance',
  source.slice(a,b)+source.slice(s,end)+
  '\nreturn {activeGuidance,junctionPhase,getSuggestedLanes};')(
- state,entry,isJunctionPhase,()=>null,()=>null,()=>null);
+ state,entry,isJunctionPhase,isPreviewManeuver,
+ instruction=>instruction?.maneuver==='CONTINUE'?'through':
+   instruction?.maneuver==='TURN_RIGHT'?'right':null,
+ ()=>null,()=>null);
 assert.equal(model.junctionPhase(),false,
  'Straight crossing at 280m cannot suppress Cruise when turn is 5.4km away');
 assert.equal(model.getSuggestedLanes(),null,
  'No pointless approach/after-junction rows for continuing straight');
 assert.equal(model.activeGuidance().kind,'maneuver',
  'Keep target turn separate from OSM through crossing');
+state.target={index:1,offset:280};
+assert.equal(model.junctionPhase(),false,
+ 'Even a manually injected through target cannot activate Junction');
+assert.equal(model.getSuggestedLanes(),null);
+assert.equal(model.activeGuidance(),null);
+state.target={index:2,offset:280};
+assert.equal(model.junctionPhase(),true,
+ 'A real KEEP maneuver may still use focused intersection mode');
+assert.equal(model.getSuggestedLanes(),null,
+ 'KEEP without directional lane evidence must not show square guesses');
+state.target={index:0,offset:5600};
 state.progress=5350;
 assert.equal(model.junctionPhase(),true,
  'Only the actual close routed turn activates intersection phase');

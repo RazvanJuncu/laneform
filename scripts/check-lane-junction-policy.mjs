@@ -12,8 +12,8 @@ assert.equal(isJunctionPhase({targetOffset:610,progress:646}),false,
   'Cruise resumes only after clearing the junction');
 assert.equal(isJunctionPhase({targetOffset:null,progress:100}),false);
 assert.equal(isJunctionPhase({targetOffset:900,
-  throughOffset:310,progress:100}),true,
-  'Significant mapped through intersection also suppresses Cruise');
+  throughOffset:310,progress:100}),false,
+  'A straight crossing 210m away cannot override a distant maneuver');
 assert.equal(twoStageLaneGuidance(group(1,0),group(1,0),80,{
   selectedTurnSide:'left'
 }),null,'Do not invent a lane decision on 1-in/1-out');
@@ -22,14 +22,15 @@ const left=twoStageLaneGuidance(group(3,2),group(2,1),85,{
 });
 assert.deepEqual(left.selected,[0],
   'Left turn with no explicit OSM arrows defaults to leftmost approach');
-assert.deepEqual(left.exit.selected,[0],
-  'Left turn without connector info exits in leftmost lane');
+assert.equal(left.exit,null,
+  'Left turn without connector info must not guess the exit lane');
 assert.equal(left.selectionBasis,'driver-side-default');
 const right=twoStageLaneGuidance(group(3,0),group(3,0),85,{
   selectedTurnSide:'right'
 });
 assert.deepEqual(right.selected,[2]);
-assert.deepEqual(right.exit.selected,[2]);
+assert.equal(right.exit,null,
+  'Right turn without connector info must not guess the exit lane');
 const tagged=twoStageLaneGuidance(group(3,1,['through','left']),
   group(2,0),85,{selectedTurnSide:'left'});
 assert.deepEqual(tagged.selected,[1],
